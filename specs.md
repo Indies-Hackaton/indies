@@ -84,14 +84,27 @@ Si `conversation_id` es `null`, el backend crea una conversación nueva y genera
 
 Fechas: el Planner debe entregar `fecha`, `start_date` y `end_date` como `ddmmyyyy`. Ejemplo: `2024-02-05` → `05022024`.
 
+El mensaje final del `MiniMax Chat Model` debe ser una respuesta natural sobre
+resultados ya ejecutados. No debe devolver bloques `[TOOL_CALL]`, comandos MCP,
+ni decir que “va a consultar” una API; si el backend no recuperó datos, debe
+decirlo explícitamente.
+
 El filtro semántico normaliza acentos y expande variantes comunes en español.
 Por ejemplo, `sistemas informáticos` también busca `sistema informatico`, lo
 que permite encontrar nombres como `SISTEMA INFORMÁTICO GESTIÓN DE RECURSOS`.
+`mp_semantic_range` también acepta `keywords: []` para búsquedas amplias por
+organismo y rango de fechas, útiles cuando el usuario pide revisar compras o
+licitaciones “dudosas” sin una categoría de producto concreta.
 
 Las tools de fecha única por organismo (`mp_orders_by_org_and_date` y
 `mp_tenders_by_org`) aceptan `organism_name`; el Executor resuelve el código
 antes de consultar Mercado Público. No deben degradar a búsquedas globales por
 fecha cuando el usuario nombra una institución.
+
+Si el Planner responde solo con `mp_resolve_organism` pero la pregunta pedía
+compras, órdenes o licitaciones en un rango de fechas, el backend repara el plan
+a `mp_semantic_range` antes de ejecutar. Esto evita respuestas conversacionales
+que se queden en “ya resolví el organismo, ahora buscaré...”.
 
 ## Ejemplos de uso
 
@@ -207,6 +220,43 @@ Respuesta natural esperada:
 
 ```text
 Encontré el organismo público más probable y mantuve candidatos similares para verificación. Si Mercado Público devuelve varias municipalidades o corporaciones relacionadas, la respuesta indica la ambigüedad en vez de escoger a ciegas.
+```
+
+### Revisión amplia de compras o licitaciones dudosas
+
+Usuario:
+
+```text
+Quisiera indagar en el caso de Cathy Barriga con respecto a la Ilustre Municipalidad de Maipú. Necesito saber compras o licitaciones dudosas ligadas a los primeros 3 días de octubre del 2019
+```
+
+Plan esperado:
+
+```json
+{
+  "tasks": [
+    {
+      "id": "t1",
+      "tool": "mp_semantic_range",
+      "description": "Buscar compras y licitaciones de Municipalidad de Maipú entre 01102019 y 03102019",
+      "parameters": {
+        "organism_name": "Ilustre Municipalidad de Maipú",
+        "start_date": "01102019",
+        "end_date": "03102019",
+        "keywords": [],
+        "include_orders": true,
+        "include_tenders": true
+      }
+    }
+  ],
+  "reasoning": "La pregunta pide compras y licitaciones para una institución en un rango de fechas."
+}
+```
+
+Respuesta natural esperada:
+
+```text
+Revisé compras y licitaciones de la Municipalidad de Maipú entre el 1 y el 3 de octubre de 2019. Encontré registros para revisar, pero con estos listados no se puede afirmar por sí solo que exista irregularidad; sí puedo señalar códigos, nombres y patrones que merecen análisis documental adicional.
 ```
 
 ## Persistencia

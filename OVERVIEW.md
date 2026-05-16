@@ -144,12 +144,22 @@ There is no auth yet; the conversation UUID is the access handle.
 - Persists user/assistant messages.
 - Calls the Planner model with recent conversation history.
 - Runs the existing `Executor` and stores every tool/API result as a `tool_run`.
-- Calls the chat model to produce the final natural-language answer.
+- Calls the chat model to produce the final natural-language answer. The
+  assistant response is expected to describe already executed results, not to
+  emit `[TOOL_CALL]` blocks or future API-call instructions.
 
 #### `MiniMaxClient` (`backend/app/services/minimax_client.py`)
 - `MINIMAX_MODEL`: structured Planner/API-routing and legacy synthesis.
 - `MINIMAX_CHAT_MODEL`: title generation and final user-facing responses.
 - Exposes trace-returning methods so chat persistence can store model requests/responses.
+- Repairs common Planner degradations before execution. For example, if the
+  Planner only resolves `Municipalidad de Maipú` but the user asked for compras
+  or licitaciones over a date range, the backend rewrites the plan to
+  `mp_semantic_range` with the extracted organism, range, and include flags.
+- Cleans generated titles and falls back to a short title from the first user
+  message when the chat model returns an assistant-style sentence.
+- Sanitizes chat responses that contain pseudo tool-call syntax and replaces
+  them with a grounded fallback based on the executed `TaskResult` objects.
 
 #### `Executor` (`backend/app/services/executor.py`)
 Runs Planner tasks concurrently. Supported tools:
@@ -172,6 +182,9 @@ Runs Planner tasks concurrently. Supported tools:
 `mp_semantic_range` normalizes accents and expands computational keywords with
 common Spanish singular/plural variants such as `sistemas informaticos` →
 `sistema informatico`, so records like `SISTEMA INFORMÁTICO ...` are retained.
+It also supports `keywords: []` for broad organism/date-range reviews, such as
+questions asking for potentially suspicious purchases or tenders without a
+specific product category.
 
 Single-date organism tools also accept `organism_name`; the Executor resolves
 the name through Mercado Público before calling `ordenesdecompra.json` or
