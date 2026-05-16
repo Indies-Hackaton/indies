@@ -22,11 +22,10 @@ class MiniMaxError(RuntimeError):
 class IntentParameters(BaseModel):
     """Parameters extracted from the user's natural-language query."""
 
-    # Code of the public organism, when the user mentions a specific entity.
+    # --- Mercado Publico fields ---
     codigoorg: str | None = Field(
         default=None, description="Organism code (CodigoOrganismo), if mentioned."
     )
-    # Date in ddmmyyyy format, as required by Mercado Publico.
     fecha: str | None = Field(
         default=None, description="Date in ddmmyyyy format, if mentioned."
     )
@@ -134,11 +133,15 @@ class Intent(BaseModel):
 # System prompt that constrains the model to emit a single JSON object
 # matching the :class:`Intent` schema.
 _SYSTEM_PROMPT = """\
-You are an intent router for an anti-corruption audit assistant that queries \
-the Chilean public procurement API "Mercado Publico".
+You are an intent router for a Chilean government transparency and \
+anti-corruption audit assistant.
+
+You have access to two data sources:
+1. Mercado Publico (public procurement API).
+2. Senado de Chile (Senate support-staff salary transparency portal).
 
 Your ONLY job is to read the user's request and reply with a SINGLE JSON \
-object - no prose, no markdown fences - using exactly this shape:
+object — no prose, no markdown fences — using exactly this shape:
 
 {
   "tool": "<orders_by_org_and_date | orders_by_date | public_organism_lookup | tender_by_code | tenders_current_day | tenders_by_date | tenders_by_status_and_date | tenders_by_supplier_and_date | tenders_by_org_and_date | semantic_org_date_range_search | unknown>",
@@ -197,6 +200,112 @@ with BuscarComprador and handle municipality/corporation ambiguity.
 """
 
 
+# ---------------------------------------------------------------------------
+# Planner prompt
+# ---------------------------------------------------------------------------
+_PLANNER_PROMPT = """\
+You are the Planner agent for a Chilean government transparency and \
+anti-corruption audit assistant.
+
+Your ONLY job: read the user's question and reply with a SINGLE JSON object \
+that lists every API call needed to answer it. No prose, no markdown.
+
+=== OUTPUT SHAPE ===
+{
+  "tasks": [
+    {
+      "id": "t1",
+      "tool": "<tool_name>",
+      "description": "<one-line description>",
+      "parameters": { <tool-specific keys> }
+    }
+  ],
+  "reasoning": "<one sentence explaining the plan>"
+}
+
+=== AVAILABLE TOOLS ===
+
+--- Senate (Senado de Chile) ---
+senado_support_staff
+  year        : int   (e.g. 2026)
+  month_es    : str   UPPERCASE Spanish month (ENERO…DICIEMBRE)
+  senator_name: str?  partial senator name (optional)
+  staff_name  : str?  partial staff name (optional)
+
+--- Mercado Público ---
+mp_orders_by_org_and_date
+  codigoorg: str, fecha: str (ddmmyyyy)
+
+mp_orders_by_date
+  fecha: str (ddmmyyyy)
+
+mp_tender_by_codigo
+  codigo: str  (e.g. "1509-5-L114")
+
+mp_tenders_today
+  (no parameters)
+
+mp_tenders_by_date
+  fecha: str (ddmmyyyy)
+
+mp_tenders_by_status
+  fecha: str (ddmmyyyy), estado: str \
+(Publicada|Cerrada|Desierta|Adjudicada|Revocada|Suspendida)
+
+mp_tenders_by_supplier
+  fecha: str (ddmmyyyy), CodigoProveedor: str
+
+mp_tenders_by_org
+  fecha: str (ddmmyyyy), codigo_organismo: str
+
+mp_search_buyers
+  (no parameters — returns the full organism directory)
+
+mp_resolve_organism
+  organism_name: str  (natural-language name; resolves to numeric code)
+
+mp_semantic_range
+  organism_name: str   (natural-language name, resolved automatically)
+  start_date   : str   (ddmmyyyy)
+  end_date     : str   (ddmmyyyy)
+  keywords     : list  (product/service keywords for filtering)
+  include_tenders: bool (default true)
+  include_orders : bool (default false)
+
+=== RULES ===
+- Emit as many tasks as needed; run independent ones in parallel.
+- Use senado_support_staff for anything about senator staff, salaries, \
+personal de apoyo.
+- Use mp_semantic_range when the user gives an institution name, a date \
+range, and product/service keywords.
+- Use mp_resolve_organism when the user wants to find or verify a specific organism by name (returns code + candidates).
+- Use mp_search_buyers only when the user explicitly wants to browse or list all public organisms.
+- Dates must be ddmmyyyy (e.g. 5 Feb 2024 → "05022024").
+- month_es must be full Spanish name in UPPERCASE.
+- Reply with the JSON object and nothing else.
+"""
+
+# ---------------------------------------------------------------------------
+# Synthesizer prompt
+# ---------------------------------------------------------------------------
+_SYNTHESIZER_PROMPT = """\
+You are the Synthesis agent for a Chilean government transparency and \
+anti-corruption audit assistant.
+
+You receive the user's original question and the results of every API \
+call that was made to answer it. Your job is to write a clear, concise \
+response in the same language the user asked in.
+
+Guidelines:
+- Summarise the key findings from ALL results.
+- Highlight relevant numbers (record counts, total amounts, names).
+- If a task failed, acknowledge it briefly.
+- Do NOT repeat raw JSON or full record lists.
+- Be concise but informative; 3-8 sentences is usually right.
+- Respond in the same language as the user's question.
+"""
+
+
 class MiniMaxClient:
     """Async client that turns user queries into structured :class:`Intent`s.
 
@@ -216,6 +325,53 @@ class MiniMaxClient:
             "Authorization": f"Bearer {settings.MINIMAX_API_KEY}",
             "Content-Type": "application/json",
         }
+
+    # ------------------------------------------------------------------
+    # Multi-agent pipeline methods
+    # ------------------------------------------------------------------
+
+    async def create_plan(self, message: str) -> "Plan":
+        """Ask the LLM to produce a structured task list for *message*."""
+        from app.services.models import Plan  # local import avoids cycles
+
+        content = await self._chat(
+            [
+                {"role": "system", "content": _PLANNER_PROMPT},
+                {"role": "user", "content": message},
+            ]
+        )
+        raw = self._extract_json(content)
+        try:
+            return Plan.model_validate(raw)
+        except ValidationError as exc:
+            raise MiniMaxError(
+                f"Planner returned JSON that does not match the Plan schema: {exc}"
+            ) from exc
+
+    async def synthesize(self, message: str, results: list) -> str:
+        """Ask the LLM to produce a human-readable summary of *results*."""
+        results_text = json.dumps(
+            [r.model_dump() for r in results],
+            ensure_ascii=False,
+            default=str,
+            indent=2,
+        )
+        content = await self._chat(
+            [
+                {"role": "system", "content": _SYNTHESIZER_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"User question: {message}\n\nTask results:\n{results_text}"
+                    ),
+                },
+            ]
+        )
+        return content.strip()
+
+    # ------------------------------------------------------------------
+    # Original single-intent classifier (kept for backward compatibility)
+    # ------------------------------------------------------------------
 
     async def classify_intent(self, message: str) -> Intent:
         """Classify a free-text query into a structured :class:`Intent`.

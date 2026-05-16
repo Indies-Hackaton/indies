@@ -13,9 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.api.routes import router as audit_router
+from app.api.senado_routes import router as senado_router
 from app.core.config import get_settings
 from app.services.mercado_publico import MercadoPublicoClient
 from app.services.minimax_client import MiniMaxClient
+from app.services.senado_scraper import SenadoClient
 
 
 class HelloResponse(BaseModel):
@@ -39,6 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.http_client = http_client
     app.state.minimax_client = MiniMaxClient(settings, http_client)
     app.state.mercado_publico_client = MercadoPublicoClient(settings, http_client)
+    app.state.senado_client = SenadoClient(http_client)
 
     try:
         yield
@@ -59,6 +62,8 @@ app.add_middleware(
 
 # Mount the audit chatbot router (POST /api/v1/audit/query).
 app.include_router(audit_router)
+# Mount the Senate transparency scraper router (GET /api/v1/senado/support-staff).
+app.include_router(senado_router)
 
 
 @app.get("/health")
