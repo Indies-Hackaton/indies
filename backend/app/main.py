@@ -1,38 +1,73 @@
-import os
+"""FastAPI application initialisation for the Indies audit API.
 
+This module wires together configuration, the shared async HTTP client, the
+service clients (MiniMax + Mercado Publico) and the API router.
+"""
+
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.api.routes import router as audit_router
+from app.core.config import get_settings
+from app.services.mercado_publico import MercadoPublicoClient
+from app.services.minimax_client import MiniMaxClient
+
 
 class HelloResponse(BaseModel):
+    """Response model for the legacy connectivity-check endpoint."""
+
     message: str
 
 
-def get_allowed_origins() -> list[str]:
-    raw_origins = os.getenv(
-        "FRONTEND_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000",
-    )
-    return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Manage resources tied to the application lifecycle.
+
+    A single :class:`httpx.AsyncClient` is created at startup and shared by all
+    service clients, enabling connection pooling/keep-alive. It is closed
+    cleanly on shutdown to avoid leaking sockets.
+    """
+    settings = get_settings()
+
+    http_client = httpx.AsyncClient(timeout=httpx.Timeout(30.0))
+    # Expose shared resources on app.state so routes can resolve them via DI.
+    app.state.http_client = http_client
+    app.state.minimax_client = MiniMaxClient(settings, http_client)
+    app.state.mercado_publico_client = MercadoPublicoClient(settings, http_client)
+
+    try:
+        yield
+    finally:
+        await http_client.aclose()
 
 
-app = FastAPI(title="Indies API", version="0.1.0")
+app = FastAPI(title="Indies Audit API", version="0.2.0", lifespan=lifespan)
 
+# CORS must be configured before the app starts serving requests.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_allowed_origins(),
+    allow_origins=get_settings().allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Mount the audit chatbot router (POST /api/v1/audit/query).
+app.include_router(audit_router)
+
 
 @app.get("/health")
-def health_check() -> dict[str, str]:
+async def health_check() -> dict[str, str]:
+    """Lightweight liveness probe."""
     return {"status": "ok"}
 
 
 @app.get("/api/hello", response_model=HelloResponse)
-def hello() -> HelloResponse:
+async def hello() -> HelloResponse:
+    """Connectivity check consumed by the Next.js frontend."""
     return HelloResponse(message="Hola desde FastAPI")
