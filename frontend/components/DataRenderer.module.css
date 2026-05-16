@@ -1,0 +1,129 @@
+.tableWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.count {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted-light);
+}
+
+/* Horizontal scroll container so wide tables don't break the layout */
+.scroll {
+  overflow-x: auto;
+  border: var(--border);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  min-width: 480px;
+}
+
+.table th {
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--white);
+  background: var(--black);
+  padding: 8px 12px;
+  white-space: nowrap;
+  border-right: 1px solid #333;
+}
+
+.table th:last-child {
+  border-right: none;
+}
+
+.table td {
+  padding: 8px 12px;
+  color: var(--black);
+  border-bottom: var(--border-thin);
+  border-right: var(--border-thin);
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.table td:last-child {
+  border-right: none;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Alternating row tint */
+.table tbody tr:nth-child(even) td {
+  background: var(--surface);
+}
+
+/* Monetary values get the red accent */
+.table td:has(> .amount) {
+  color: var(--red);
+  font-weight: 700;
+}
+
+/* JSON fallback */
+.jsonWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jsonToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+
+.jsonToggle:hover {
+  color: var(--black);
+}
+
+.jsonToggleArrow {
+  color: var(--red);
+  font-size: 0.8rem;
+}
+
+.jsonToggleHint {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 0.75rem;
+  color: var(--muted-light);
+}
+
+.json {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--muted);
+  background: var(--surface);
+  border: var(--border-thin);
+  padding: 14px 16px;
+  overflow-x: auto;
+  white-space: pre;
+}
