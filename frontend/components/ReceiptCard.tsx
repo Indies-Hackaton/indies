@@ -1,4 +1,7 @@
-import type { QueryEntry, TaskResult } from "@/lib/types";
+"use client";
+
+import { useId, useState } from "react";
+import type { AuditResponse, QueryEntry, TaskResult } from "@/lib/types";
 import { DataRenderer } from "./DataRenderer";
 import { SynthesisContent } from "./SynthesisContent";
 import styles from "./ReceiptCard.module.css";
@@ -10,6 +13,58 @@ interface ReceiptCardProps {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <h3 className={styles.sectionLabel}>{children}</h3>;
+}
+
+function AgentPlanSection({ plan }: { plan: AuditResponse["plan"] }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const taskCount = plan.tasks.length;
+
+  return (
+    <section className={`${styles.section} ${styles.planSection}`}>
+      <div className={`${styles.planCard} ${open ? styles.planCardOpen : ""}`}>
+        <button
+          type="button"
+          className={styles.planCardHeader}
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls={panelId}
+        >
+          <span className={styles.planCardHeaderMain}>
+            <SectionLabel>Plan del agente</SectionLabel>
+            <span className={styles.planCardMeta}>
+              {taskCount} tarea{taskCount !== 1 ? "s" : ""} planificada
+              {taskCount !== 1 ? "s" : ""}
+            </span>
+          </span>
+          <span className={styles.planCardAction}>
+            <span className={styles.planCardActionLabel}>
+              {open ? "Ocultar" : "Ver detalle"}
+            </span>
+            <span
+              className={`${styles.planCardChevron} ${open ? styles.planCardChevronOpen : ""}`}
+              aria-hidden
+            >
+              ▾
+            </span>
+          </span>
+        </button>
+
+        <div id={panelId} className={styles.planCardBody} hidden={!open}>
+          <p className={styles.planBodyLabel}>Razonamiento y tareas</p>
+          <p className={styles.reasoning}>{plan.reasoning}</p>
+          <ol className={styles.taskList}>
+            {plan.tasks.map((task) => (
+              <li key={task.id} className={styles.taskItem}>
+                <span className={styles.badge}>{task.tool}</span>
+                <p className={styles.taskDescription}>{task.description}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function Skeleton() {
@@ -60,7 +115,6 @@ export function ReceiptCard({ entry, index }: ReceiptCardProps) {
   return (
     <article className={styles.card}>
 
-      {/* ── Card header bar ── */}
       <div className={styles.cardBar}>
         <span className={styles.cardBarLabel}>Recibo de consulta</span>
         <span className={styles.cardBarNum}>#{num}</span>
@@ -68,7 +122,6 @@ export function ReceiptCard({ entry, index }: ReceiptCardProps) {
 
       <div className={styles.cardBody}>
 
-        {/* ── Section 1: original question (always visible) ── */}
         <section className={`${styles.section} ${styles.questionSection}`}>
           <SectionLabel>Pregunta original</SectionLabel>
           <div className={styles.questionBox}>
@@ -76,10 +129,8 @@ export function ReceiptCard({ entry, index }: ReceiptCardProps) {
           </div>
         </section>
 
-        {/* ── Loading ── */}
         {status === "loading" && <Skeleton />}
 
-        {/* ── Error ── */}
         {status === "error" && (
           <section className={`${styles.section} ${styles.sectionError}`}>
             <SectionLabel>Error</SectionLabel>
@@ -91,25 +142,14 @@ export function ReceiptCard({ entry, index }: ReceiptCardProps) {
           </section>
         )}
 
-        {/* ── Success ── */}
         {status === "success" && response && (
           <div className={styles.successLayout}>
-            <section className={`${styles.section} ${styles.planSection}`}>
-              <SectionLabel>Plan del agente</SectionLabel>
-              <p className={styles.reasoning}>{response.plan.reasoning}</p>
-              <ol className={styles.taskList}>
-                {response.plan.tasks.map((task) => (
-                  <li key={task.id} className={styles.taskItem}>
-                    <span className={styles.badge}>{task.tool}</span>
-                    <p className={styles.taskDescription}>{task.description}</p>
-                  </li>
-                ))}
-              </ol>
-            </section>
+            <AgentPlanSection plan={response.plan} />
 
             <section className={`${styles.section} ${styles.resultsSection}`}>
               <SectionLabel>
-                Resultados · {response.total_records} registro{response.total_records !== 1 ? "s" : ""} en total
+                Resultados · {response.total_records} registro
+                {response.total_records !== 1 ? "s" : ""} en total
               </SectionLabel>
               <div className={styles.taskResults}>
                 {response.results.map((result) => (

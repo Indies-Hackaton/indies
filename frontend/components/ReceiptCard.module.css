@@ -88,10 +88,141 @@
   margin: 0;
 }
 
-/* ── Plan ───────────────────────────────────────────────────────── */
+/* ── Plan del agente (tarjeta colapsable) ───────────────────────── */
 .planSection {
   background: var(--surface);
+  padding-top: 16px;
+  padding-bottom: 16px;
+  gap: 0;
+}
+
+.planCard {
+  border: var(--border);
+  background: var(--white);
+  overflow: hidden;
+  width: 100%;
+}
+
+.planCardOpen {
+  box-shadow: 0 3px 0 var(--red);
+}
+
+.planCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: none;
+  background: var(--white);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  overflow: hidden;
+  transition: background 0.12s ease;
+}
+
+.planCardOpen .planCardHeader {
+  border-bottom: var(--border);
+  background: #fafafa;
+}
+
+.planCardHeader:hover {
+  background: #fff8f8;
+}
+
+.planCardHeader:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+}
+
+.planCardHeaderMain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.planCardMeta {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.45;
+  padding-left: 13px;
+}
+
+.planCardAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 7px 10px;
+  border: 1.5px solid var(--black);
+  background: var(--white);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.planCardActionLabel {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--black);
+  white-space: nowrap;
+}
+
+.planCardChevron {
+  font-size: 0.875rem;
+  line-height: 1;
+  color: var(--red);
+  transition: transform 0.15s ease;
+}
+
+.planCardChevronOpen {
+  transform: rotate(180deg);
+}
+
+.planCardHeader:hover .planCardAction {
+  background: var(--black);
+  border-color: var(--black);
+}
+
+.planCardHeader:hover .planCardActionLabel,
+.planCardHeader:hover .planCardChevron {
+  color: var(--white);
+}
+
+.planCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  background: var(--surface);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.planCardBody[hidden] {
+  display: none !important;
+}
+
+.planBodyLabel {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-light);
+  margin: 0 0 2px;
+  padding-left: 13px;
+  border-left: 2px solid var(--line);
 }
 
 .reasoning {
@@ -244,27 +375,7 @@
 }
 
 @media (min-width: 1280px) {
-  .successLayout {
-    display: grid;
-    grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
-    grid-template-areas:
-      "plan results"
-      "synthesis synthesis";
-    align-items: start;
-  }
-
-  .planSection {
-    grid-area: plan;
-    border-right: var(--border-thin);
-  }
-
-  .resultsSection {
-    grid-area: results;
-    min-width: 0;
-  }
-
   .synthesisSection {
-    grid-area: synthesis;
     padding: 24px 28px 32px;
   }
 
@@ -361,6 +472,21 @@
 
   .taskCount {
     margin-left: 0;
+  }
+
+  .planCardHeader {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .planCardAction {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .planCardBody {
+    padding: 12px 14px 14px;
   }
 }
 
