@@ -76,22 +76,46 @@
 #### `MiniMaxClient` (`backend/app/services/minimax_client.py`)
 - Sends user message to MiniMax with a strict system prompt.
 - Model must reply with a single JSON object matching `Intent`:
-  - `tool`: `"orders_by_org_and_date"` | `"orders_by_date"` | `"unknown"`
-  - `parameters.codigoorg`: organism code or `null`
-  - `parameters.fecha`: date in `ddmmyyyy` or `null`
+  - `tool`: one of the supported query intents listed below.
+  - `parameters.codigoorg` / `parameters.codigo_organismo`: organism code or `null`
+  - `parameters.fecha`: single date in `ddmmyyyy` or `null`
+  - `parameters.codigo`: tender code / Codigo de Licitacion or `null`
+  - `parameters.estado`: tender status name/code or `null`
+  - `parameters.codigo_proveedor`: supplier code or `null`
+  - `parameters.organism_name`: public organism name to resolve or `null`
+  - `parameters.keywords`: semantic product/service terms
+  - `parameters.start_date` / `parameters.end_date`: inclusive range bounds in `ddmmyyyy`
+  - `parameters.include_orders` / `parameters.include_tenders`: source flags for semantic range search
   - `reasoning`: one-sentence explanation
 - Temperature `0.1` keeps routing deterministic.
 - Defensively strips markdown fences from LLM output.
 
 #### `MercadoPublicoClient` (`backend/app/services/mercado_publico.py`)
 - Wraps `https://api.mercadopublico.cl/servicios/v1/publico`
-- Endpoint used: `ordenesdecompra.json`
+- Endpoints used: `ordenesdecompra.json`, `licitaciones.json`, and `Empresas/BuscarComprador`
 - Auth: `ticket` query param injected automatically.
+- Retries retryable Mercado Publico failures (`429`, `500`, `502`, `503`, `504`) before surfacing a `502` from the API route.
+- Resolves named public organisms via `BuscarComprador`; if several municipality/corporation entities match, the backend returns an ambiguity payload instead of guessing.
 
 | Method | Mercado Público params |
 |---|---|
 | `get_orders_by_org_and_date(codigoorg, fecha)` | `CodigoOrganismo` + `fecha` |
 | `get_orders_by_date(fecha)` | `fecha` only |
+| `lookup_public_organisms()` | `ticket` only against `Empresas/BuscarComprador` |
+| `resolve_public_organism(name)` | Local resolution over `BuscarComprador` results |
+| `get_tender_by_code(codigo)` | `codigo` |
+| `get_tenders_current_day()` | `ticket` only against `licitaciones.json` |
+| `get_tenders_by_date(fecha)` | `fecha` |
+| `get_tenders_by_status_and_date(fecha, estado)` | `fecha` + normalized `estado` |
+| `get_tenders_by_supplier_and_date(fecha, codigo_proveedor)` | `fecha` + `CodigoProveedor` |
+| `get_tenders_by_org_and_date(codigo_organismo, fecha)` | `fecha` + `CodigoOrganismo` |
+
+#### Semantic range workflow (`backend/app/api/routes.py`)
+- `semantic_org_date_range_search` is implemented in the route layer because it orchestrates multiple Mercado Publico calls.
+- Requires `start_date`, `end_date`, keywords, and either an organism code or `organism_name`.
+- Expands the inclusive date range, capped at 366 days.
+- Queries tenders by default. It also queries purchase orders when `include_orders` is `true`.
+- Filters returned records with `pandas` across descriptive columns such as name, description, product, category, item, acquisition, tender and glossary fields.
 
 ---
 
@@ -100,7 +124,8 @@
 **Stack:** Next.js (App Router) · TypeScript · vanilla CSS custom properties
 
 - `NEXT_PUBLIC_API_URL` env var points to backend (default `http://localhost:8000`).
-- Currently a starter status page — **needs to be replaced with the chat UI**.
+- Home page is a chat-style audit UI that sends questions to `POST /api/v1/audit/query`.
+- Renders a receipt per query with the original question, model intent, Mercado Público query and returned data.
 - Design tokens in `globals.css`: `--accent: #0f766e` (teal), `--background: #f7f7f2` (off-white).
 
 ---
@@ -127,6 +152,16 @@ npm run dev
 
 | Intent tool | Required params | Example question |
 |---|---|---|
-| `orders_by_org_and_date` | `codigoorg` + `fecha` | "Show orders for organism 7239 on Feb 5 2024" |
+| `orders_by_org_and_date` | `fecha` + `codigoorg`, `codigo_organismo`, or `organism_name` | "Show orders for organism 7239 on Feb 5 2024" |
 | `orders_by_date` | `fecha` | "Show all orders from 05/02/2024" |
+| `public_organism_lookup` | optional `organism_name` | "Verify the public organism for Municipalidad de Algarrobo" |
+| `tender_by_code` | `codigo` | "Find tender 1509-5-L114" |
+| `tenders_current_day` | — | "What tenders are available today?" |
+| `tenders_by_date` | `fecha` | "Show tenders from 05/02/2024" |
+| `tenders_by_status_and_date` | `fecha` + `estado` | "Show adjudicated tenders from 05/02/2024" |
+| `tenders_by_supplier_and_date` | `fecha` + `codigo_proveedor` | "Show supplier 76543210 tenders from 05/02/2024" |
+| `tenders_by_org_and_date` | `fecha` + `codigoorg`, `codigo_organismo`, or `organism_name` | "Show Municipalidad de Algarrobo tenders from 05/02/2024" |
+| `semantic_org_date_range_search` | `start_date` + `end_date` + keywords + organism | "Find computer systems for Municipalidad de Algarrobo between January and March 2024" |
 | `unknown` | — | Unrecognized / incomplete requests |
+
+For detailed agent capabilities and full request/response examples, see `specs.md`.
