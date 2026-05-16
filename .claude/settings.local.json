@@ -6,5 +6,8 @@
       "Bash(/tmp/indies_venv/bin/python -c \"from app.main import app; print\\('app imported OK, routes:', [r.path for r in app.routes if hasattr\\(r,'path'\\)]\\)\")",
       "Bash(/tmp/indies_venv/bin/python -c ' *)"
     ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
   }
 }
