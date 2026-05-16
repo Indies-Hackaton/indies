@@ -1,4 +1,4 @@
-import type { QueryResponse } from "./types";
+import type { AuditResponse } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function submitQuery(message: string): Promise<QueryResponse> {
+export async function submitQuery(message: string): Promise<AuditResponse> {
   const baseUrl =
     process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -35,5 +35,5 @@ export async function submitQuery(message: string): Promise<QueryResponse> {
     throw new ApiError(detail, res.status);
   }
 
-  return res.json() as Promise<QueryResponse>;
+  return res.json() as Promise<AuditResponse>;
 }

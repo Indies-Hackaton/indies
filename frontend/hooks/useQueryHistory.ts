@@ -30,17 +30,12 @@ export function useQueryHistory() {
 
     try {
       const response = await submitQuery(question);
-
-      const status =
-        response.intent.tool === "unknown" ? "unknown-intent" : "success";
-
       setEntries((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, response, status } : e)),
+        prev.map((e) => (e.id === id ? { ...e, response, status: "success" } : e)),
       );
     } catch (err) {
       const error =
         err instanceof Error ? err.message : "Error desconocido.";
-
       setEntries((prev) =>
         prev.map((e) =>
           e.id === id ? { ...e, status: "error", error } : e,

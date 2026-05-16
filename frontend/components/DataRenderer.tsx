@@ -4,28 +4,7 @@ import { useState } from "react";
 import styles from "./DataRenderer.module.css";
 
 interface DataRendererProps {
-  data: Record<string, unknown>;
-}
-
-// Keys the Mercado Público API commonly uses to wrap the record list.
-// TODO: once a real API response is available, pin this to the exact key
-// (e.g. replace the whole list with just ["Listado"]) and remove the
-// generic array-scan fallback below. Tracking issue: check OVERVIEW.md
-// under "MercadoPublicoClient" for the confirmed response shape.
-const LIST_KEYS = ["Listado", "listado", "items", "data", "results"];
-
-function extractList(data: Record<string, unknown>): Record<string, unknown>[] | null {
-  for (const key of LIST_KEYS) {
-    const value = data[key];
-    if (Array.isArray(value) && value.length > 0) return value as Record<string, unknown>[];
-  }
-  // Fallback: find any top-level key that holds a non-empty array.
-  // TODO: remove this fallback once the real response shape is confirmed —
-  // it could accidentally pick up the wrong array in a more complex response.
-  for (const value of Object.values(data)) {
-    if (Array.isArray(value) && value.length > 0) return value as Record<string, unknown>[];
-  }
-  return null;
+  records: Record<string, unknown>[];
 }
 
 // TODO: replace this value-based heuristic with a column-name allowlist once
@@ -39,7 +18,11 @@ function formatValue(value: unknown): string {
     // Heuristic: large integers are likely monetary amounts.
     // Fragile — will mis-format non-monetary large numbers (e.g. org codes).
     if (Number.isInteger(value) && value > 999) {
-      return value.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+      return value.toLocaleString("es-CL", {
+        style: "currency",
+        currency: "CLP",
+        maximumFractionDigits: 0,
+      });
     }
     return value.toLocaleString("es-CL");
   }
@@ -50,28 +33,39 @@ function formatValue(value: unknown): string {
 
 // Some column names from the API are verbose — shorten them for display.
 const COLUMN_LABELS: Record<string, string> = {
-  CodigoOrdenCompra:   "Código OC",
-  NombreOrganismo:     "Organismo",
-  CodigoOrganismo:     "Cód. Org.",
-  MontoBruto:          "Monto bruto",
-  MontoNeto:           "Monto neto",
-  FechaCreacion:       "Fecha creación",
-  FechaCierre:         "Fecha cierre",
-  Nombre:              "Nombre",
-  Estado:              "Estado",
-  TipoMoneda:          "Moneda",
+  CodigoOrdenCompra:    "Código OC",
+  CodigoLicitacion:     "Código Licitación",
+  NombreOrganismo:      "Organismo",
+  CodigoOrganismo:      "Cód. Org.",
+  MontoBruto:           "Monto bruto",
+  MontoNeto:            "Monto neto",
+  FechaCreacion:        "Fecha creación",
+  FechaCierre:          "Fecha cierre",
+  Nombre:               "Nombre",
+  Estado:               "Estado",
+  TipoMoneda:           "Moneda",
+  NombreProveedor:      "Proveedor",
+  CodigoProveedor:      "Cód. Proveedor",
 };
 
 function labelFor(key: string): string {
   return COLUMN_LABELS[key] ?? key;
 }
 
-function TableRenderer({ rows }: { rows: Record<string, unknown>[] }) {
-  const columns = Object.keys(rows[0]);
+export function DataRenderer({ records }: DataRendererProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (records.length === 0) {
+    return <p className={styles.empty}>Sin registros para esta consulta.</p>;
+  }
+
+  const columns = Object.keys(records[0]);
 
   return (
     <div className={styles.tableWrap}>
-      <p className={styles.count}>{rows.length} registro{rows.length !== 1 ? "s" : ""}</p>
+      <p className={styles.count}>
+        {records.length} registro{records.length !== 1 ? "s" : ""}
+      </p>
       <div className={styles.scroll}>
         <table className={styles.table}>
           <thead>
@@ -82,7 +76,7 @@ function TableRenderer({ rows }: { rows: Record<string, unknown>[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
+            {records.map((row, i) => (
               <tr key={i}>
                 {columns.map((col) => (
                   <td key={col}>{formatValue(row[col])}</td>
@@ -92,39 +86,27 @@ function TableRenderer({ rows }: { rows: Record<string, unknown>[] }) {
           </tbody>
         </table>
       </div>
+
+      {/* Raw JSON toggle for debugging */}
+      <div className={styles.jsonWrap}>
+        <button
+          className={styles.jsonToggle}
+          onClick={() => setExpanded((v) => !v)}
+          type="button"
+          aria-expanded={expanded}
+        >
+          <span className={styles.jsonToggleArrow}>{expanded ? "▾" : "▸"}</span>
+          Respuesta sin formato
+          <span className={styles.jsonToggleHint}>
+            {expanded ? "ocultar" : "mostrar JSON"}
+          </span>
+        </button>
+        {expanded && (
+          <pre className={styles.json}>
+            {JSON.stringify(records, null, 2)}
+          </pre>
+        )}
+      </div>
     </div>
   );
-}
-
-function JsonRenderer({ data }: { data: Record<string, unknown> }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className={styles.jsonWrap}>
-      <button
-        className={styles.jsonToggle}
-        onClick={() => setExpanded((v) => !v)}
-        type="button"
-        aria-expanded={expanded}
-      >
-        <span className={styles.jsonToggleArrow}>{expanded ? "▾" : "▸"}</span>
-        Respuesta sin formato
-        <span className={styles.jsonToggleHint}>
-          {expanded ? "ocultar" : "mostrar JSON"}
-        </span>
-      </button>
-      {expanded && (
-        <pre className={styles.json}>
-          {JSON.stringify(data, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
-}
-
-export function DataRenderer({ data }: DataRendererProps) {
-  const list = extractList(data);
-
-  if (list) return <TableRenderer rows={list} />;
-  return <JsonRenderer data={data} />;
 }

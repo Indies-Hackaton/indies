@@ -41,7 +41,7 @@
   border-bottom: var(--border-thin);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .section:last-child {
@@ -65,14 +65,90 @@
   line-height: 1.6;
 }
 
-/* ── Section 2: intent ──────────────────────────────────────────── */
-.intentRow {
+/* ── Section 2: plan ────────────────────────────────────────────── */
+.reasoning {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 0;
+  list-style: none;
+  counter-reset: task-counter;
+}
+
+.taskItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  counter-increment: task-counter;
+}
+
+.taskItem::before {
+  content: counter(task-counter);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted-light);
+  min-width: 16px;
+  padding-top: 3px;
+}
+
+/* ── Section 3: task results ────────────────────────────────────── */
+.taskResults {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.taskBlock {
+  border: var(--border-thin);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.taskBlockError {
+  border-left: 3px solid var(--red);
+}
+
+.taskHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
+.taskDescription {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-style: italic;
+  flex: 1;
+}
+
+.taskCount {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted-light);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.taskError {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--red);
+}
+
+/* ── Shared: badge ──────────────────────────────────────────────── */
 .badge {
   font-family: var(--font-display);
   font-size: 0.72rem;
@@ -82,48 +158,15 @@
   background: var(--black);
   color: var(--white);
   padding: 3px 10px;
+  white-space: nowrap;
 }
 
-.badgeUnknown {
-  background: var(--muted);
-}
-
-.param {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--red);
-  border-bottom: 1.5px solid var(--red);
-  padding-bottom: 1px;
-}
-
-.reasoning {
+/* ── Section 4: synthesis ───────────────────────────────────────── */
+.synthesis {
   font-family: var(--font-body);
-  font-size: 0.82rem;
-  font-style: italic;
-  color: var(--muted);
-  line-height: 1.55;
-}
-
-/* ── Section 3: query block ─────────────────────────────────────── */
-.queryBlock {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--black);
   line-height: 1.7;
-  color: var(--muted);
-  background: var(--surface);
-  border: var(--border-thin);
-  padding: 12px 14px;
-  white-space: pre;
-  overflow-x: auto;
-}
-
-/* ── Section 4: no data ─────────────────────────────────────────── */
-.noData {
-  font-family: var(--font-body);
-  font-size: 0.88rem;
-  font-style: italic;
-  color: var(--muted-light);
 }
 
 /* ── Error state ────────────────────────────────────────────────── */
@@ -143,18 +186,6 @@
   font-style: italic;
   color: var(--muted);
   line-height: 1.55;
-}
-
-/* ── Unknown intent state ───────────────────────────────────────── */
-.sectionWarning {
-  background: var(--surface);
-}
-
-.warningText {
-  font-family: var(--font-body);
-  font-size: 0.88rem;
-  color: var(--muted);
-  line-height: 1.6;
 }
 
 /* ── Loading skeleton ───────────────────────────────────────────── */
