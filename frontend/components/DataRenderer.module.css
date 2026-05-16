@@ -1,42 +1,69 @@
 .tableWrap {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.tableMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
 }
 
 .count {
   font-family: var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--muted-light);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  margin: 0;
 }
 
-/* Horizontal scroll container so wide tables don't break the layout */
+.scrollHint {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--muted-light);
+  margin: 0;
+  font-style: italic;
+}
+
 .scroll {
-  overflow-x: auto;
+  position: relative;
+  overflow: auto;
+  max-height: clamp(280px, 52vh, 680px);
   border: var(--border);
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
 }
 
 .table {
-  width: 100%;
-  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
-  min-width: 480px;
+  font-size: 0.8rem;
+  table-layout: auto;
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   text-align: left;
   font-family: var(--font-display);
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0.15em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--white);
   background: var(--black);
-  padding: 8px 12px;
+  padding: 10px 14px;
   white-space: nowrap;
   border-right: 1px solid #333;
 }
@@ -46,7 +73,7 @@
 }
 
 .table td {
-  padding: 8px 12px;
+  padding: 10px 14px;
   color: var(--black);
   border-bottom: var(--border-thin);
   border-right: var(--border-thin);
@@ -62,22 +89,79 @@
   border-bottom: none;
 }
 
-/* Alternating row tint */
 .table tbody tr:nth-child(even) td {
   background: var(--surface);
 }
 
-/* Monetary values get the red accent */
-.table td:has(> .amount) {
-  color: var(--red);
-  font-weight: 700;
+.table tbody tr:hover td {
+  background: #fff5f5;
 }
 
-/* JSON fallback */
+.table tbody tr:hover td.cellSticky {
+  background: #fff0f0;
+}
+
+.cellWrap {
+  white-space: normal !important;
+  min-width: 12rem;
+  max-width: min(28rem, 50vw);
+  line-height: 1.45;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.cellCode {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.cellSticky {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--white);
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+  font-weight: 600;
+  min-width: 8.5rem;
+  max-width: 14rem;
+}
+
+.table th.cellSticky {
+  z-index: 3;
+  background: var(--black);
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.15);
+}
+
+.table tbody tr:nth-child(even) td.cellSticky {
+  background: var(--surface);
+}
+
+.table tbody tr:hover td.cellSticky {
+  background: #fff0f0;
+}
+
+.cellSource {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.empty {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-style: italic;
+  color: var(--muted);
+  margin: 0;
+}
+
 .jsonWrap {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 4px;
 }
 
 .jsonToggle {
@@ -85,10 +169,9 @@
   align-items: center;
   gap: 8px;
   font-family: var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--muted);
   background: none;
   border: none;
@@ -126,4 +209,46 @@
   padding: 14px 16px;
   overflow-x: auto;
   white-space: pre;
+  max-height: min(40vh, 320px);
+}
+
+@media (max-width: 767px) {
+  .scroll {
+    max-height: min(380px, 48vh);
+  }
+
+  .table {
+    font-size: 0.75rem;
+  }
+
+  .table th,
+  .table td {
+    padding: 8px 10px;
+  }
+
+  .cellWrap {
+    min-width: 10rem;
+    max-width: min(18rem, 72vw);
+  }
+
+  .scrollHint {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .scroll {
+    max-height: min(320px, 42vh);
+  }
+
+  .tableMeta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (min-width: 1280px) {
+  .scroll {
+    max-height: clamp(320px, 58vh, 720px);
+  }
 }

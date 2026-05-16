@@ -28,6 +28,7 @@ export default function Home() {
 
       {/* ── Header ── */}
       <header className={styles.header}>
+        <div className={styles.headerInner}>
         <div className={styles.headerLeft}>
           <span className={styles.logo}>
             IN<span className={styles.logoAccent}>D</span>IES
@@ -54,6 +55,7 @@ export default function Home() {
               Limpiar
             </button>
           )}
+        </div>
         </div>
       </header>
 

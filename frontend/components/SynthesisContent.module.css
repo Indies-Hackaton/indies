@@ -1,0 +1,81 @@
+.root {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.65;
+  color: var(--black);
+  letter-spacing: 0.01em;
+  width: 100%;
+  max-width: none;
+}
+
+.h2 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--black);
+  margin: 0 0 12px;
+  padding-left: 10px;
+  border-left: 3px solid var(--red);
+  line-height: 1.35;
+}
+
+.h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  margin: 18px 0 8px;
+  line-height: 1.35;
+}
+
+.p {
+  margin: 0 0 14px;
+}
+
+.p:last-child {
+  margin-bottom: 0;
+}
+
+.list {
+  margin: 0 0 16px;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.list li {
+  line-height: 1.55;
+}
+
+.root strong {
+  font-weight: 700;
+  color: var(--black);
+}
+
+@media (min-width: 1024px) {
+  .root {
+    font-size: 1.03125rem;
+    line-height: 1.7;
+    column-count: 2;
+    column-gap: 40px;
+  }
+
+  .h2,
+  .h3 {
+    break-after: avoid;
+    column-span: all;
+  }
+
+  .list {
+    break-inside: avoid;
+  }
+}
+
+@media (max-width: 767px) {
+  .root {
+    font-size: 0.9375rem;
+    column-count: 1;
+  }
+}

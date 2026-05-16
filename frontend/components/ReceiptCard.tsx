@@ -1,5 +1,6 @@
 import type { QueryEntry, TaskResult } from "@/lib/types";
 import { DataRenderer } from "./DataRenderer";
+import { SynthesisContent } from "./SynthesisContent";
 import styles from "./ReceiptCard.module.css";
 
 interface ReceiptCardProps {
@@ -8,7 +9,7 @@ interface ReceiptCardProps {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className={styles.sectionLabel}>{children}</p>;
+  return <h3 className={styles.sectionLabel}>{children}</h3>;
 }
 
 function Skeleton() {
@@ -68,9 +69,11 @@ export function ReceiptCard({ entry, index }: ReceiptCardProps) {
       <div className={styles.cardBody}>
 
         {/* ── Section 1: original question (always visible) ── */}
-        <section className={styles.section}>
+        <section className={`${styles.section} ${styles.questionSection}`}>
           <SectionLabel>Pregunta original</SectionLabel>
-          <p className={styles.question}>{question}</p>
+          <div className={styles.questionBox}>
+            <p className={styles.question}>{question}</p>
+          </div>
         </section>
 
         {/* ── Loading ── */}
@@ -90,23 +93,21 @@ export function ReceiptCard({ entry, index }: ReceiptCardProps) {
 
         {/* ── Success ── */}
         {status === "success" && response && (
-          <>
-            {/* Section 2: agent plan */}
-            <section className={styles.section}>
+          <div className={styles.successLayout}>
+            <section className={`${styles.section} ${styles.planSection}`}>
               <SectionLabel>Plan del agente</SectionLabel>
               <p className={styles.reasoning}>{response.plan.reasoning}</p>
               <ol className={styles.taskList}>
                 {response.plan.tasks.map((task) => (
                   <li key={task.id} className={styles.taskItem}>
                     <span className={styles.badge}>{task.tool}</span>
-                    <span className={styles.taskDescription}>{task.description}</span>
+                    <p className={styles.taskDescription}>{task.description}</p>
                   </li>
                 ))}
               </ol>
             </section>
 
-            {/* Section 3: execution results per task */}
-            <section className={styles.section}>
+            <section className={`${styles.section} ${styles.resultsSection}`}>
               <SectionLabel>
                 Resultados · {response.total_records} registro{response.total_records !== 1 ? "s" : ""} en total
               </SectionLabel>
@@ -117,12 +118,13 @@ export function ReceiptCard({ entry, index }: ReceiptCardProps) {
               </div>
             </section>
 
-            {/* Section 4: synthesis */}
-            <section className={styles.section}>
+            <section className={`${styles.section} ${styles.synthesisSection}`}>
               <SectionLabel>Síntesis</SectionLabel>
-              <p className={styles.synthesis}>{response.synthesis}</p>
+              <div className={styles.synthesisBody}>
+                <SynthesisContent text={response.synthesis} />
+              </div>
             </section>
-          </>
+          </div>
         )}
 
       </div>

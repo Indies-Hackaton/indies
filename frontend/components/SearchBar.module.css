@@ -1,6 +1,6 @@
 .wrapper {
   width: 100%;
-  padding: 14px 24px;
+  padding: 14px var(--content-gutter);
   border-bottom: var(--border);
   background: var(--white);
 }
@@ -8,7 +8,8 @@
 .form {
   display: flex;
   align-items: stretch;
-  max-width: 860px;
+  width: 100%;
+  max-width: var(--content-max);
   margin: 0 auto;
 }
 
@@ -82,4 +83,36 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 767px) {
+  .wrapper {
+    padding: 12px var(--content-gutter);
+  }
+
+  .input {
+    font-size: 0.9rem;
+    padding: 10px 12px;
+  }
+
+  .button {
+    min-width: 48px;
+    padding: 10px 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .form {
+    flex-direction: column;
+  }
+
+  .input {
+    border-right: var(--border);
+    border-bottom: none;
+  }
+
+  .button {
+    width: 100%;
+    min-height: 44px;
+  }
 }
