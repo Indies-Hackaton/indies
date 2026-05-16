@@ -1,16 +1,13 @@
 # Indies Product Agent Specs
 
-Este documento describe los agentes del producto, los poderes que expone el
-asistente de auditoría y ejemplos completos de uso. Los ejemplos son
-representativos: muestran la forma esperada del flujo sin depender de resultados
-reales completos de Mercado Público.
+Este documento describe los agentes del producto, sus poderes y ejemplos de uso del flujo conversacional persistente.
 
 ## Contrato principal
 
-Todas las consultas del usuario entran por el mismo endpoint:
+Todas las consultas conversacionales entran por:
 
 ```http
-POST /api/v1/audit/query
+POST /api/v1/chat/messages
 Content-Type: application/json
 ```
 
@@ -18,690 +15,213 @@ Request:
 
 ```json
 {
-  "message": "Muéstrame órdenes de compra de la Municipalidad de Algarrobo el 05/02/2024"
+  "conversation_id": null,
+  "message": "Busca sistemas computacionales para la Municipalidad de Algarrobo entre enero y marzo 2024"
 }
 ```
 
-Response:
+Response resumida:
 
 ```json
 {
-  "intent": {
-    "tool": "orders_by_org_and_date",
-    "parameters": {
-      "codigoorg": null,
-      "fecha": "05022024",
-      "codigo": null,
-      "estado": null,
-      "codigo_proveedor": null,
-      "codigo_organismo": null,
-      "organism_name": "Municipalidad de Algarrobo",
-      "keywords": [],
-      "start_date": null,
-      "end_date": null,
-      "include_orders": null,
-      "include_tenders": null
-    },
-    "reasoning": "El usuario pidió órdenes de compra para un organismo y una fecha."
+  "conversation": {
+    "id": "uuid",
+    "title": "Sistemas computacionales en Algarrobo"
   },
-  "data": {},
-  "detail": null
+  "user_message": {
+    "id": "uuid",
+    "role": "user",
+    "content": "Busca sistemas computacionales..."
+  },
+  "assistant_message": {
+    "id": "uuid",
+    "role": "assistant",
+    "content": "Encontré 3 registros relevantes...",
+    "linked_invocation_ids": ["planner-uuid", "chat-uuid"],
+    "linked_tool_run_ids": ["toolrun-uuid"]
+  },
+  "planner": {
+    "invocation_id": "planner-uuid",
+    "plan": {
+      "tasks": []
+    }
+  },
+  "tool_runs": [],
+  "total_records": 0
 }
 ```
 
-Errores principales:
-
-| Status | Cuándo ocurre |
-|---|---|
-| `422` | Faltan parámetros obligatorios, una fecha no usa `ddmmyyyy`, el rango está invertido o el estado de licitación no es válido. |
-| `502` | MiniMax o Mercado Público no responden correctamente. |
-| `500` | Falla interna, por ejemplo falta `pandas` para la búsqueda semántica. |
+Si `conversation_id` es `null`, el backend crea una conversación nueva y genera un título desde el primer mensaje. Si viene un UUID existente, el backend usa el historial reciente como contexto.
 
 ## Arquitectura de agentes
 
-| Agente | Poder | Entrada | Salida |
-|---|---|---|---|
-| Frontend/usuario | Captura una pregunta en lenguaje natural y la envía al backend. | Texto libre. | `POST /api/v1/audit/query` con `{ "message": "..." }`. |
-| FastAPI Audit Orchestrator | Coordina clasificación, validación de parámetros y consulta de datos. | Request del frontend. | `{ intent, data, detail }`. |
-| MiniMax Intent Router | Clasifica la intención y extrae parámetros estructurados. | Mensaje del usuario. | `Intent` con `tool`, `parameters` y `reasoning`. |
-| Mercado Público Data Agent | Consulta órdenes de compra, licitaciones y compradores públicos. | Parámetros validados por el backend. | JSON de Mercado Público o payload enriquecido. |
+| Agente | Poder | Guarda trazabilidad |
+|---|---|---|
+| Usuario/API client | Envía mensajes naturales por `curl` u otro cliente HTTP y conserva el UUID devuelto. | No, solo muestra lo recibido. |
+| Chat Orchestrator (`ChatService`) | Crea conversaciones, mensajes, invocaciones LLM y tool runs. | Sí: `conversations`, `messages`, `llm_invocations`, `tool_runs`. |
+| MiniMax Chat Model | Genera título y respuesta final en lenguaje natural. | Sí: `title_generation` y `chat_response`. |
+| MiniMax Planner Model | Convierte el mensaje + contexto en tareas API estructuradas. | Sí: `planner`. |
+| Executor | Ejecuta llamadas reales en paralelo. | Sí: una fila `tool_runs` por tarea. |
+| Mercado Público Data Agent | Consulta compras, licitaciones y organismos. | Queda vinculado al `tool_run`. |
+| Senado Data Agent | Consulta personal de apoyo y remuneraciones del Senado. | Queda vinculado al `tool_run`. |
 
-## Poderes soportados por `tool`
+## Poderes del Planner/API agent
 
-| Tool | Qué hace | Parámetros requeridos | Backend action |
-|---|---|---|---|
-| `orders_by_org_and_date` | Busca órdenes de compra de un organismo en una fecha. | `fecha` y `codigoorg`, `codigo_organismo` u `organism_name`. | Resuelve organismo si viene por nombre y llama `get_orders_by_org_and_date`. |
-| `orders_by_date` | Busca todas las órdenes de compra de una fecha. | `fecha`. | Llama `get_orders_by_date`. |
-| `public_organism_lookup` | Lista o resuelve compradores/organismos públicos. | Opcional: `organism_name`. | Llama `lookup_public_organisms` o `resolve_public_organism`. |
-| `tender_by_code` | Busca una licitación por código. | `codigo`. | Llama `get_tender_by_code`. |
-| `tenders_current_day` | Busca licitaciones del día actual según Mercado Público. | Ninguno. | Llama `get_tenders_current_day`. |
-| `tenders_by_date` | Busca todas las licitaciones de una fecha. | `fecha`. | Llama `get_tenders_by_date`. |
-| `tenders_by_status_and_date` | Busca licitaciones por estado y fecha. | `fecha`, `estado`. | Normaliza `estado` y llama `get_tenders_by_status_and_date`. |
-| `tenders_by_supplier_and_date` | Busca licitaciones por proveedor y fecha. | `fecha`, `codigo_proveedor`. | Llama `get_tenders_by_supplier_and_date`. |
-| `tenders_by_org_and_date` | Busca licitaciones por organismo y fecha. | `fecha` y `codigoorg`, `codigo_organismo` u `organism_name`. | Resuelve organismo si viene por nombre y llama `get_tenders_by_org_and_date`. |
-| `semantic_org_date_range_search` | Busca por organismo, rango de fechas y keywords en órdenes y/o licitaciones. | `organism_name` o código, `start_date`, `end_date`, `keywords`. | Expande fechas, consulta fuentes en paralelo y filtra con `pandas`. |
-| `unknown` | Marca consultas fuera de los poderes soportados. | Ninguno. | No consulta Mercado Público; retorna `detail`. |
+| Tool | Qué hace | Parámetros |
+|---|---|---|
+| `senado_support_staff` | Personal de apoyo del Senado. | `year`, `month_es`, opcional `senator_name`, `staff_name`. |
+| `mp_orders_by_org_and_date` | Órdenes por organismo y fecha. | `fecha` (`ddmmyyyy`) + `codigoorg` u `organism_name`. |
+| `mp_orders_by_date` | Órdenes por fecha. | `fecha`. |
+| `mp_tender_by_codigo` | Licitación por código. | `codigo`. |
+| `mp_tenders_today` | Licitaciones del día actual. | Sin parámetros. |
+| `mp_tenders_by_date` | Licitaciones por fecha. | `fecha`. |
+| `mp_tenders_by_status` | Licitaciones por estado y fecha. | `fecha`, `estado`. |
+| `mp_tenders_by_supplier` | Licitaciones por proveedor y fecha. | `fecha`, `CodigoProveedor`. |
+| `mp_tenders_by_org` | Licitaciones por organismo y fecha. | `fecha` + `codigo_organismo` u `organism_name`. |
+| `mp_search_buyers` | Lista compradores públicos. | Sin parámetros. |
+| `mp_resolve_organism` | Resuelve nombre de organismo a código/candidatos. | `organism_name`. |
+| `mp_semantic_range` | Busca por organismo, rango y keywords en licitaciones/órdenes. | `organism_name`, `start_date`, `end_date`, `keywords`, flags opcionales. |
 
-Fechas: MiniMax debe entregar `fecha`, `start_date` y `end_date` en formato
-`ddmmyyyy`. Ejemplo: `2024-02-05` se representa como `05022024`.
+Fechas: el Planner debe entregar `fecha`, `start_date` y `end_date` como `ddmmyyyy`. Ejemplo: `2024-02-05` → `05022024`.
 
-## Ejemplos de flujo completo
+El filtro semántico normaliza acentos y expande variantes comunes en español.
+Por ejemplo, `sistemas informáticos` también busca `sistema informatico`, lo
+que permite encontrar nombres como `SISTEMA INFORMÁTICO GESTIÓN DE RECURSOS`.
 
-### 1. Órdenes de compra por organismo y fecha
+Las tools de fecha única por organismo (`mp_orders_by_org_and_date` y
+`mp_tenders_by_org`) aceptan `organism_name`; el Executor resuelve el código
+antes de consultar Mercado Público. No deben degradar a búsquedas globales por
+fecha cuando el usuario nombra una institución.
 
-Pregunta:
+## Ejemplos de uso
+
+### Búsqueda semántica Mercado Público
+
+Usuario:
 
 ```text
-Muéstrame órdenes de compra de la Municipalidad de Algarrobo el 05/02/2024
+Busca sistemas computacionales para la Municipalidad de Algarrobo entre enero y marzo 2024
 ```
 
-Intent esperado:
+Plan esperado:
 
 ```json
 {
-  "tool": "orders_by_org_and_date",
-  "parameters": {
-    "codigoorg": null,
-    "codigo_organismo": null,
-    "organism_name": "Municipalidad de Algarrobo",
-    "fecha": "05022024",
-    "codigo": null,
-    "estado": null,
-    "codigo_proveedor": null,
-    "keywords": [],
-    "start_date": null,
-    "end_date": null,
-    "include_orders": null,
-    "include_tenders": null
-  },
-  "reasoning": "La pregunta pide órdenes de compra para un organismo y una fecha."
-}
-```
-
-Acción backend:
-
-```text
-Resolver "Municipalidad de Algarrobo" con BuscarComprador.
-Si hay un organismo único, consultar ordenesdecompra.json con CodigoOrganismo y fecha=05022024.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "orders_by_org_and_date",
-    "parameters": {
-      "organism_name": "Municipalidad de Algarrobo",
-      "fecha": "05022024"
-    },
-    "reasoning": "La pregunta pide órdenes de compra para un organismo y una fecha."
-  },
-  "data": {
-    "organism_resolution": {
-      "selected": {
-        "code": "3081",
-        "name": "I MUNICIPALIDAD DE ALGARROBO"
-      },
-      "ambiguous": false,
-      "verification_required": false
-    },
-    "payload": {
-      "Cantidad": 1,
-      "Ordenes": [
-        {
-          "Codigo": "3081-123-SE24",
-          "Nombre": "Compra de insumos municipales"
-        }
-      ]
-    }
-  },
-  "detail": "Resolved to a unique public organism."
-}
-```
-
-Nota: si Mercado Público devuelve varios compradores posibles, el backend no
-elige a ciegas. Retorna `blocked_by_organism_ambiguity: true` y la lista de
-`candidates`.
-
-### 2. Órdenes de compra por fecha
-
-Pregunta:
-
-```text
-Muestra todas las órdenes de compra del 05/02/2024
-```
-
-Intent esperado:
-
-```json
-{
-  "tool": "orders_by_date",
-  "parameters": {
-    "fecha": "05022024"
-  },
-  "reasoning": "La pregunta pide órdenes de compra para una fecha sin organismo específico."
-}
-```
-
-Acción backend:
-
-```text
-Consultar ordenesdecompra.json con fecha=05022024.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "orders_by_date",
-    "parameters": {
-      "fecha": "05022024"
-    },
-    "reasoning": "La pregunta pide órdenes de compra para una fecha sin organismo específico."
-  },
-  "data": {
-    "Cantidad": 2,
-    "Ordenes": [
-      {
-        "Codigo": "123-45-SE24",
-        "Nombre": "Servicio de mantención"
+  "tasks": [
+    {
+      "id": "t1",
+      "tool": "mp_semantic_range",
+      "description": "Buscar licitaciones de sistemas computacionales para Municipalidad de Algarrobo",
+      "parameters": {
+        "organism_name": "Municipalidad de Algarrobo",
+        "start_date": "01012024",
+        "end_date": "31032024",
+        "keywords": ["sistemas computacionales"],
+        "include_tenders": true,
+        "include_orders": false
       }
-    ]
-  },
-  "detail": null
+    }
+  ],
+  "reasoning": "La pregunta combina institución, rango de fechas y términos de producto."
 }
 ```
 
-### 3. Buscar organismo público
+Respuesta natural esperada:
 
-Pregunta:
+```text
+Encontré 3 registros relacionados con sistemas computacionales para la Municipalidad de Algarrobo en el rango solicitado. La búsqueda consultó licitaciones por fecha y filtró por términos como sistemas, computacionales, software y hardware. Los resultados quedan vinculados a esta respuesta para revisar el detalle de cada llamada.
+```
+
+Vinculación guardada:
+
+```json
+{
+  "assistant_message": {
+    "linked_invocation_ids": ["planner-uuid", "chat-uuid"],
+    "linked_tool_run_ids": ["toolrun-uuid"]
+  }
+}
+```
+
+### Personal de apoyo del Senado
+
+Usuario:
+
+```text
+Analiza el personal de apoyo del senador Araya en marzo 2026
+```
+
+Plan esperado:
+
+```json
+{
+  "tasks": [
+    {
+      "id": "t1",
+      "tool": "senado_support_staff",
+      "description": "Consultar personal de apoyo del senador Araya en marzo 2026",
+      "parameters": {
+        "year": 2026,
+        "month_es": "MARZO",
+        "senator_name": "Araya"
+      }
+    }
+  ],
+  "reasoning": "La pregunta pide datos de personal de apoyo del Senado."
+}
+```
+
+Respuesta natural esperada:
+
+```text
+Encontré registros de personal de apoyo asociados al senador Araya para marzo de 2026. La respuesta resume los nombres, roles y montos disponibles, y la llamada al portal de transparencia del Senado queda enlazada al mensaje.
+```
+
+### Resolver organismo público
+
+Usuario:
 
 ```text
 Verifica qué organismo público corresponde a Municipalidad de Algarrobo
 ```
 
-Intent esperado:
+Plan esperado:
 
 ```json
 {
-  "tool": "public_organism_lookup",
-  "parameters": {
-    "organism_name": "Municipalidad de Algarrobo"
-  },
-  "reasoning": "La pregunta pide resolver un comprador público por nombre."
-}
-```
-
-Acción backend:
-
-```text
-Consultar Empresas/BuscarComprador y resolver coincidencias por nombre.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "public_organism_lookup",
-    "parameters": {
-      "organism_name": "Municipalidad de Algarrobo"
-    },
-    "reasoning": "La pregunta pide resolver un comprador público por nombre."
-  },
-  "data": {
-    "query": "Municipalidad de Algarrobo",
-    "selected": {
-      "code": "3081",
-      "name": "I MUNICIPALIDAD DE ALGARROBO"
-    },
-    "ambiguous": false,
-    "candidates": [
-      {
-        "code": "3081",
-        "name": "I MUNICIPALIDAD DE ALGARROBO",
-        "match_type": "exact"
+  "tasks": [
+    {
+      "id": "t1",
+      "tool": "mp_resolve_organism",
+      "description": "Resolver el comprador público por nombre",
+      "parameters": {
+        "organism_name": "Municipalidad de Algarrobo"
       }
-    ],
-    "candidate_count": 1,
-    "verification_required": false
-  },
-  "detail": "Resolved to a unique public organism."
-}
-```
-
-### 4. Licitación por código
-
-Pregunta:
-
-```text
-Busca la licitación 1509-5-L114
-```
-
-Intent esperado:
-
-```json
-{
-  "tool": "tender_by_code",
-  "parameters": {
-    "codigo": "1509-5-L114"
-  },
-  "reasoning": "La pregunta entrega un Código de Licitación."
-}
-```
-
-Acción backend:
-
-```text
-Consultar licitaciones.json con codigo=1509-5-L114.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "tender_by_code",
-    "parameters": {
-      "codigo": "1509-5-L114"
-    },
-    "reasoning": "La pregunta entrega un Código de Licitación."
-  },
-  "data": {
-    "Cantidad": 1,
-    "Listado": [
-      {
-        "CodigoExterno": "1509-5-L114",
-        "Nombre": "Adquisición de equipamiento"
-      }
-    ]
-  },
-  "detail": null
-}
-```
-
-### 5. Licitaciones del día actual
-
-Pregunta:
-
-```text
-Qué licitaciones hay hoy?
-```
-
-Intent esperado:
-
-```json
-{
-  "tool": "tenders_current_day",
-  "parameters": {},
-  "reasoning": "La pregunta pide licitaciones del día actual sin fecha explícita."
-}
-```
-
-Acción backend:
-
-```text
-Consultar licitaciones.json sin filtros adicionales.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "tenders_current_day",
-    "parameters": {},
-    "reasoning": "La pregunta pide licitaciones del día actual sin fecha explícita."
-  },
-  "data": {
-    "Cantidad": 2,
-    "Listado": [
-      {
-        "CodigoExterno": "1001-9-LP26",
-        "Nombre": "Servicio publicado hoy"
-      }
-    ]
-  },
-  "detail": null
-}
-```
-
-### 6. Licitaciones por fecha
-
-Pregunta:
-
-```text
-Dame todas las licitaciones del 05/02/2024
-```
-
-Intent esperado:
-
-```json
-{
-  "tool": "tenders_by_date",
-  "parameters": {
-    "fecha": "05022024"
-  },
-  "reasoning": "La pregunta pide licitaciones para una fecha específica."
-}
-```
-
-Acción backend:
-
-```text
-Consultar licitaciones.json con fecha=05022024.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "tenders_by_date",
-    "parameters": {
-      "fecha": "05022024"
-    },
-    "reasoning": "La pregunta pide licitaciones para una fecha específica."
-  },
-  "data": {
-    "Cantidad": 1,
-    "Listado": [
-      {
-        "CodigoExterno": "2000-10-LE24",
-        "Nombre": "Convenio de suministro"
-      }
-    ]
-  },
-  "detail": null
-}
-```
-
-### 7. Licitaciones por estado y fecha
-
-Pregunta:
-
-```text
-Dame licitaciones adjudicadas del 05/02/2024
-```
-
-Intent esperado:
-
-```json
-{
-  "tool": "tenders_by_status_and_date",
-  "parameters": {
-    "fecha": "05022024",
-    "estado": "Adjudicada"
-  },
-  "reasoning": "La pregunta pide licitaciones filtradas por estado y fecha."
-}
-```
-
-Acción backend:
-
-```text
-Normalizar estado Adjudicada a código Mercado Público y consultar licitaciones.json con fecha y estado.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "tenders_by_status_and_date",
-    "parameters": {
-      "fecha": "05022024",
-      "estado": "Adjudicada"
-    },
-    "reasoning": "La pregunta pide licitaciones filtradas por estado y fecha."
-  },
-  "data": {
-    "Cantidad": 1,
-    "Listado": [
-      {
-        "CodigoExterno": "3000-20-LQ24",
-        "Estado": "Adjudicada",
-        "Nombre": "Servicio adjudicado"
-      }
-    ]
-  },
-  "detail": null
-}
-```
-
-Estados aceptados: `Publicada`, `Cerrada`, `Desierta`, `Adjudicada`,
-`Revocada`, `Suspendida`, `Todos` o sus códigos internos.
-
-### 8. Licitaciones por proveedor y fecha
-
-Pregunta:
-
-```text
-Busca licitaciones del proveedor 76543210 el 05/02/2024
-```
-
-Intent esperado:
-
-```json
-{
-  "tool": "tenders_by_supplier_and_date",
-  "parameters": {
-    "fecha": "05022024",
-    "codigo_proveedor": "76543210"
-  },
-  "reasoning": "La pregunta pide licitaciones filtradas por proveedor y fecha."
-}
-```
-
-Acción backend:
-
-```text
-Consultar licitaciones.json con fecha=05022024 y CodigoProveedor=76543210.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "tenders_by_supplier_and_date",
-    "parameters": {
-      "fecha": "05022024",
-      "codigo_proveedor": "76543210"
-    },
-    "reasoning": "La pregunta pide licitaciones filtradas por proveedor y fecha."
-  },
-  "data": {
-    "Cantidad": 1,
-    "Listado": [
-      {
-        "CodigoExterno": "4000-30-LE24",
-        "CodigoProveedor": "76543210",
-        "Nombre": "Oferta asociada al proveedor"
-      }
-    ]
-  },
-  "detail": null
-}
-```
-
-### 9. Licitaciones por organismo y fecha
-
-Pregunta:
-
-```text
-Muestra licitaciones de la Municipalidad de Algarrobo el 05/02/2024
-```
-
-Intent esperado:
-
-```json
-{
-  "tool": "tenders_by_org_and_date",
-  "parameters": {
-    "organism_name": "Municipalidad de Algarrobo",
-    "fecha": "05022024"
-  },
-  "reasoning": "La pregunta pide licitaciones para un organismo y fecha."
-}
-```
-
-Acción backend:
-
-```text
-Resolver el organismo con BuscarComprador y consultar licitaciones.json con CodigoOrganismo y fecha.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "tenders_by_org_and_date",
-    "parameters": {
-      "organism_name": "Municipalidad de Algarrobo",
-      "fecha": "05022024"
-    },
-    "reasoning": "La pregunta pide licitaciones para un organismo y fecha."
-  },
-  "data": {
-    "organism_resolution": {
-      "selected": {
-        "code": "3081",
-        "name": "I MUNICIPALIDAD DE ALGARROBO"
-      },
-      "ambiguous": false
-    },
-    "payload": {
-      "Cantidad": 1,
-      "Listado": [
-        {
-          "CodigoExterno": "5000-40-LP24",
-          "Nombre": "Licitación municipal"
-        }
-      ]
     }
-  },
-  "detail": "Resolved to a unique public organism."
+  ],
+  "reasoning": "La pregunta pide verificar un organismo por nombre."
 }
 ```
 
-### 10. Búsqueda semántica por organismo y rango
-
-Pregunta:
+Respuesta natural esperada:
 
 ```text
-Busca sistemas computacionales para Municipalidad de Algarrobo entre enero y marzo 2024
+Encontré el organismo público más probable y mantuve candidatos similares para verificación. Si Mercado Público devuelve varias municipalidades o corporaciones relacionadas, la respuesta indica la ambigüedad en vez de escoger a ciegas.
 ```
 
-Intent esperado:
+## Persistencia
 
-```json
-{
-  "tool": "semantic_org_date_range_search",
-  "parameters": {
-    "organism_name": "Municipalidad de Algarrobo",
-    "keywords": ["sistemas computacionales"],
-    "start_date": "01012024",
-    "end_date": "31032024",
-    "include_orders": null,
-    "include_tenders": true
-  },
-  "reasoning": "La pregunta combina organismo, rango de fechas y términos de producto."
-}
-```
+Cada turno guarda:
 
-Acción backend:
+| Registro | Contenido |
+|---|---|
+| `messages` user | Texto original del usuario. |
+| `llm_invocations` planner | Prompt, modelo, JSON del plan o error. |
+| `tool_runs` | Tool, parámetros, resultado `TaskResult`, status y conteo. |
+| `llm_invocations` chat_response | Prompt, modelo y respuesta natural final. |
+| `messages` assistant | Texto final mostrado al usuario y links a invocaciones/tool runs. |
 
-```text
-Expandir el rango de fechas, resolver organismo, consultar licitaciones por día y filtrar registros con keywords semánticas.
-```
+El título se genera una sola vez al crear la conversación. Si falla, se usa un título corto derivado del primer mensaje.
 
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "semantic_org_date_range_search",
-    "parameters": {
-      "organism_name": "Municipalidad de Algarrobo",
-      "keywords": ["sistemas computacionales"],
-      "start_date": "01012024",
-      "end_date": "31032024",
-      "include_tenders": true
-    },
-    "reasoning": "La pregunta combina organismo, rango de fechas y términos de producto."
-  },
-  "data": {
-    "detail": "Semantic date-range search completed.",
-    "codigo_organismo": "3081",
-    "dates": ["01012024", "02012024"],
-    "queried_sources": {
-      "tenders": true,
-      "purchase_orders": false
-    },
-    "keywords": ["sistemas computacionales"],
-    "search_terms": ["sistemas computacionales", "sistemas", "computacionales", "software", "hardware"],
-    "raw_record_count": 42,
-    "count": 3,
-    "columns": ["CodigoExterno", "Nombre", "Descripcion"],
-    "records": [
-      {
-        "CodigoExterno": "6000-50-LE24",
-        "Nombre": "Adquisición de software",
-        "_source": "tenders",
-        "_query_fecha": "15022024"
-      }
-    ]
-  },
-  "detail": "Semantic date-range search completed."
-}
-```
-
-Notas:
-
-- El rango máximo permitido es de 366 días.
-- Si `include_orders` y `include_tenders` son `null`, el backend consulta
-  licitaciones por defecto.
-- Si la pregunta dice "órdenes de compra o licitaciones", ambos flags deben
-  quedar en `true`.
-
-### 11. Intent desconocido
-
-Pregunta:
-
-```text
-Cuéntame un chiste sobre auditorías
-```
-
-Intent esperado:
-
-```json
-{
-  "tool": "unknown",
-  "parameters": {},
-  "reasoning": "La solicitud no corresponde a una consulta soportada de Mercado Público."
-}
-```
-
-Acción backend:
-
-```text
-No consultar Mercado Público.
-```
-
-Respuesta resumida:
-
-```json
-{
-  "intent": {
-    "tool": "unknown",
-    "parameters": {},
-    "reasoning": "La solicitud no corresponde a una consulta soportada de Mercado Público."
-  },
-  "data": null,
-  "detail": "Could not map the request to a known audit tool."
-}
-```
+La base SQLite local recomendada es `sqlite+aiosqlite:///./data/indies.db`.
+El backend crea el directorio `data/` al arrancar.

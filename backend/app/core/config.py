@@ -33,8 +33,10 @@ class Settings(BaseSettings):
     MINIMAX_API_KEY: str
     # Base URL of the MiniMax API.
     MINIMAX_BASE_URL: str
-    # Chat model used as the intent router/classifier.
+    # Model used by the planner/API-routing agent.
     MINIMAX_MODEL: str
+    # Model used for human-facing chat responses. Falls back to MINIMAX_MODEL.
+    MINIMAX_CHAT_MODEL: str | None = None
 
     # --- Mercado Publico (Chilean government procurement API) --------------
     # Ticket (token) required by every Mercado Publico request.
@@ -46,6 +48,10 @@ class Settings(BaseSettings):
     # Comma-separated list of origins allowed to call this API.
     FRONTEND_ORIGINS: str
 
+    # --- Persistence -------------------------------------------------------
+    # SQLite is the default local store for conversations/messages/tool traces.
+    DATABASE_URL: str = "sqlite+aiosqlite:///./data/indies.db"
+
     @property
     def allowed_origins(self) -> list[str]:
         """Return ``FRONTEND_ORIGINS`` as a clean list of origin strings."""
@@ -54,6 +60,11 @@ class Settings(BaseSettings):
             for origin in self.FRONTEND_ORIGINS.split(",")
             if origin.strip()
         ]
+
+    @property
+    def minimax_chat_model(self) -> str:
+        """Return the chat model, falling back to the planner model."""
+        return self.MINIMAX_CHAT_MODEL or self.MINIMAX_MODEL
 
 
 @lru_cache

@@ -5,6 +5,7 @@ service-layer import cycles. Add new tools here; the Executor and the
 Planner prompt are the only files that need updating.
 """
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -49,3 +50,92 @@ class AuditResponse(BaseModel):
     results: list[TaskResult]
     synthesis: str = Field(description="LLM-generated human-readable summary.")
     total_records: int
+
+
+class ConversationOut(BaseModel):
+    """Conversation metadata returned to API clients."""
+
+    id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class MessageOut(BaseModel):
+    """Chat message plus trace links."""
+
+    id: str
+    conversation_id: str
+    role: Literal["user", "assistant"]
+    content: str
+    status: Literal["processing", "completed", "failed"]
+    created_at: datetime
+    updated_at: datetime
+    linked_invocation_ids: list[str] = Field(default_factory=list)
+    linked_tool_run_ids: list[str] = Field(default_factory=list)
+
+
+class LlmInvocationOut(BaseModel):
+    """Public trace record for a model invocation."""
+
+    id: str
+    conversation_id: str
+    assistant_message_id: str | None = None
+    purpose: Literal["title_generation", "planner", "chat_response"]
+    model: str
+    request_json: dict[str, Any]
+    response_json: dict[str, Any] | None = None
+    status: Literal["ok", "error"]
+    error: str | None = None
+    created_at: datetime
+
+
+class ToolRunOut(BaseModel):
+    """Public trace record for one API/tool execution."""
+
+    id: str
+    conversation_id: str
+    assistant_message_id: str
+    planner_invocation_id: str
+    task_id: str
+    tool: str
+    parameters: dict[str, Any]
+    result: TaskResult
+    status: Literal["ok", "error"]
+    error: str | None = None
+    record_count: int
+    created_at: datetime
+
+
+class ChatPlannerOut(BaseModel):
+    """Planner trace returned with a chat message response."""
+
+    invocation_id: str
+    plan: Plan
+
+
+class ChatMessageResponse(BaseModel):
+    """Response returned by POST /api/v1/chat/messages."""
+
+    conversation: ConversationOut
+    user_message: MessageOut
+    assistant_message: MessageOut
+    planner: ChatPlannerOut | None = None
+    tool_runs: list[ToolRunOut] = Field(default_factory=list)
+    total_records: int = 0
+
+
+class ConversationListItem(ConversationOut):
+    """Conversation list row with lightweight summary fields."""
+
+    last_message: MessageOut | None = None
+    message_count: int = 0
+
+
+class ConversationDetailResponse(BaseModel):
+    """Full persisted conversation with messages and trace links."""
+
+    conversation: ConversationOut
+    messages: list[MessageOut]
+    llm_invocations: list[LlmInvocationOut]
+    tool_runs: list[ToolRunOut]

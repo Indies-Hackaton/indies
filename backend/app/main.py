@@ -12,9 +12,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.api.chat_routes import router as chat_router
 from app.api.routes import router as audit_router
 from app.api.senado_routes import router as senado_router
 from app.core.config import get_settings
+from app.core.database import init_db, make_engine, make_sessionmaker
 from app.services.mercado_publico import MercadoPublicoClient
 from app.services.minimax_client import MiniMaxClient
 from app.services.senado_scraper import SenadoClient
@@ -37,8 +39,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
 
     http_client = httpx.AsyncClient(timeout=httpx.Timeout(30.0))
+    db_engine = make_engine(settings.DATABASE_URL)
+    await init_db(db_engine)
+
     # Expose shared resources on app.state so routes can resolve them via DI.
     app.state.http_client = http_client
+    app.state.db_engine = db_engine
+    app.state.db_sessionmaker = make_sessionmaker(db_engine)
     app.state.minimax_client = MiniMaxClient(settings, http_client)
     app.state.mercado_publico_client = MercadoPublicoClient(settings, http_client)
     app.state.senado_client = SenadoClient(http_client)
@@ -47,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await http_client.aclose()
+        await db_engine.dispose()
 
 
 app = FastAPI(title="Indies Audit API", version="0.2.0", lifespan=lifespan)
@@ -62,6 +70,8 @@ app.add_middleware(
 
 # Mount the audit chatbot router (POST /api/v1/audit/query).
 app.include_router(audit_router)
+# Mount persistent chat routes (POST /api/v1/chat/messages).
+app.include_router(chat_router)
 # Mount the Senate transparency scraper router (GET /api/v1/senado/support-staff).
 app.include_router(senado_router)
 

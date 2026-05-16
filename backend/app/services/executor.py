@@ -7,14 +7,14 @@ is a matter of adding a branch to :meth:`Executor._dispatch`.
 Tool catalogue (keep in sync with the Planner prompt):
 
   Mercado Público:
-    mp_orders_by_org_and_date   codigoorg, fecha
+    mp_orders_by_org_and_date   codigoorg|organism_name, fecha
     mp_orders_by_date           fecha
     mp_tender_by_codigo         codigo
     mp_tenders_today            (no params)
     mp_tenders_by_date          fecha
     mp_tenders_by_status        fecha, estado
     mp_tenders_by_supplier      fecha, CodigoProveedor
-    mp_tenders_by_org           fecha, codigo_organismo
+    mp_tenders_by_org           fecha, codigo_organismo|organism_name
     mp_search_buyers            (no params) — dumps all organisms
     mp_resolve_organism         organism_name — resolves name → code
     mp_semantic_range           organism_name, start_date, end_date,
@@ -114,11 +114,20 @@ class Executor:
 
         # ── Mercado Público ─────────────────────────────────────────────
         if tool == "mp_orders_by_org_and_date":
-            _require(p, "codigoorg", "fecha")
+            _require(p, "fecha")
+            codigoorg, resolution = await self._resolve_organism_code(p)
+            if not codigoorg:
+                return [], {
+                    "organism_resolution": resolution,
+                    "blocked_by_organism_ambiguity": True,
+                }
             data = await self._mp.get_orders_by_org_and_date(
-                codigoorg=p["codigoorg"], fecha=p["fecha"]
+                codigoorg=codigoorg, fecha=p["fecha"]
             )
-            return _extract_records(data), {}
+            metadata: dict[str, Any] = {"codigo_organismo": codigoorg}
+            if resolution:
+                metadata["organism_resolution"] = resolution
+            return _extract_records(data), metadata
 
         if tool == "mp_orders_by_date":
             _require(p, "fecha")
@@ -154,11 +163,20 @@ class Executor:
             return _extract_records(data), {}
 
         if tool == "mp_tenders_by_org":
-            _require(p, "fecha", "codigo_organismo")
+            _require(p, "fecha")
+            codigo_organismo, resolution = await self._resolve_organism_code(p)
+            if not codigo_organismo:
+                return [], {
+                    "organism_resolution": resolution,
+                    "blocked_by_organism_ambiguity": True,
+                }
             data = await self._mp.get_tenders_by_org_and_date(
-                fecha=p["fecha"], codigo_organismo=p["codigo_organismo"]
+                fecha=p["fecha"], codigo_organismo=codigo_organismo
             )
-            return _extract_records(data), {}
+            metadata = {"codigo_organismo": codigo_organismo}
+            if resolution:
+                metadata["organism_resolution"] = resolution
+            return _extract_records(data), metadata
 
         if tool == "mp_search_buyers":
             data = await self._mp.lookup_public_organisms()
@@ -253,6 +271,27 @@ class Executor:
         if api_errors:
             metadata["error_sample"] = api_errors[:3]  # first 3 to avoid flooding
         return filtered, metadata
+
+    async def _resolve_organism_code(
+        self,
+        p: dict[str, Any],
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Return a Mercado Público organism code from code or name params."""
+        code = p.get("codigoorg") or p.get("codigo_organismo")
+        if code:
+            return str(code), None
+
+        organism_name = p.get("organism_name")
+        if not organism_name:
+            raise ExecutorError(
+                "Missing required parameters: codigoorg/codigo_organismo or organism_name"
+            )
+
+        resolution = await self._mp.resolve_public_organism(str(organism_name))
+        selected = resolution.get("selected")
+        if not selected:
+            return None, resolution
+        return str(selected["code"]), resolution
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +399,7 @@ def _semantic_filter(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     if not keywords or not records:
         return records, []
-    terms = [_normalize_search(k) for k in keywords if k]
+    terms = _expand_search_terms(keywords)
     searchable_keys = [
         k for k in records[0]
         if any(
@@ -376,3 +415,86 @@ def _semantic_filter(
         return any(t in text for t in terms if t)
 
     return [r for r in records if _matches(r)], terms
+
+
+def _expand_search_terms(keywords: list[str]) -> list[str]:
+    """Expand semantic keywords with common Spanish singular/plural variants."""
+    terms: list[str] = []
+    for keyword in keywords:
+        normalized = _normalize_search(keyword)
+        if not normalized:
+            continue
+        terms.append(normalized)
+        terms.extend(
+            part
+            for part in re.split(r"[/,;]+|\s+(?:or|and|o|y)\s+", normalized)
+            if part
+        )
+
+    for term in list(terms):
+        singular = _singularize_phrase(term)
+        if singular != term:
+            terms.append(singular)
+
+    normalized_terms = set(terms)
+    if any(
+        root in term
+        for term in normalized_terms
+        for root in (
+            "comput",
+            "informat",
+            "sistema",
+            "software",
+            "hardware",
+            "tecnolog",
+        )
+    ):
+        terms.extend(
+            [
+                "sistema informatico",
+                "sistemas informaticos",
+                "sistema computacional",
+                "sistemas computacionales",
+                "computacional",
+                "computacionales",
+                "computacion",
+                "informatica",
+                "informaticas",
+                "informatico",
+                "informaticos",
+                "software",
+                "hardware",
+                "tecnologia",
+                "tecnologias",
+            ]
+        )
+
+    seen: set[str] = set()
+    unique_terms = []
+    for term in terms:
+        normalized = _normalize_search(term)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            unique_terms.append(normalized)
+    return unique_terms
+
+
+def _singularize_phrase(term: str) -> str:
+    words = [_singularize_word(word) for word in term.split()]
+    return " ".join(words)
+
+
+def _singularize_word(word: str) -> str:
+    if len(word) <= 4:
+        return word
+    if word.endswith("ciones"):
+        return f"{word[:-6]}cion"
+    if word.endswith("ales"):
+        return f"{word[:-4]}al"
+    if word.endswith("icos") or word.endswith("icas"):
+        return word[:-1]
+    if word.endswith("es") and not word.endswith(("ces", "ses")):
+        return word[:-2]
+    if word.endswith("s") and not word.endswith(("is", "us")):
+        return word[:-1]
+    return word
