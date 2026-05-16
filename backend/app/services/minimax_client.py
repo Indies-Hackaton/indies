@@ -7,6 +7,8 @@ the parameters extracted from the query.
 """
 
 import json
+import re
+import unicodedata
 from typing import Any, Literal
 
 import httpx
@@ -234,7 +236,11 @@ senado_support_staff
 
 --- Mercado Público ---
 mp_orders_by_org_and_date
-  codigoorg: str, fecha: str (ddmmyyyy)
+  codigoorg: str? OR organism_name: str?, fecha: str (ddmmyyyy)
+  Use for purchase orders on one date when the request includes either a public
+  organism code or a named organism. If the user gives a name like
+  "Municipalidad de Algarrobo", use organism_name; do not fall back to
+  mp_orders_by_date.
 
 mp_orders_by_date
   fecha: str (ddmmyyyy)
@@ -256,7 +262,9 @@ mp_tenders_by_supplier
   fecha: str (ddmmyyyy), CodigoProveedor: str
 
 mp_tenders_by_org
-  fecha: str (ddmmyyyy), codigo_organismo: str
+  fecha: str (ddmmyyyy), codigo_organismo: str? OR organism_name: str?
+  Use for tenders on one date when the request includes either a public
+  organism code or a named organism.
 
 mp_search_buyers
   (no parameters — returns the full organism directory)
@@ -278,6 +286,16 @@ mp_semantic_range
 personal de apoyo.
 - Use mp_semantic_range when the user gives an institution name, a date \
 range, and product/service keywords.
+- Use mp_orders_by_org_and_date when the user asks for purchase orders for a \
+named public organism and a single date; pass the name as organism_name if no \
+numeric code is provided.
+- Use mp_tenders_by_org when the user asks for tenders for a named public \
+organism and a single date; pass the name as organism_name if no numeric code \
+is provided.
+- Use mp_orders_by_date only when the request has a purchase-order date and no \
+specific organism name/code.
+- Use mp_tenders_by_date only when the request has a tender date and no \
+specific organism name/code.
 - Use mp_resolve_organism when the user wants to find or verify a specific organism by name (returns code + candidates).
 - Use mp_search_buyers only when the user explicitly wants to browse or list all public organisms.
 - Dates must be ddmmyyyy (e.g. 5 Feb 2024 → "05022024").
@@ -305,6 +323,39 @@ Guidelines:
 - Respond in the same language as the user's question.
 """
 
+# ---------------------------------------------------------------------------
+# Conversational chat prompts
+# ---------------------------------------------------------------------------
+_TITLE_PROMPT = """\
+You generate short titles for audit conversations.
+
+Rules:
+- Use the same language as the user's first message.
+- Return plain text only.
+- Maximum 8 words.
+- No quotes, markdown, or punctuation at the end.
+"""
+
+_CHAT_RESPONSE_PROMPT = """\
+You are the user-facing conversational agent for Indies, a Chilean government \
+transparency and anti-corruption audit assistant.
+
+You receive:
+1. Recent conversation history.
+2. The user's current message.
+3. The Planner agent's API plan.
+4. The tool/API results already executed by the backend.
+
+Rules:
+- Answer in natural language, in the same language as the user.
+- Use the API results as evidence; do not invent data.
+- Mention useful counts, names, totals, failed tool calls, and ambiguity.
+- If there are no records, say that clearly and suggest a narrower follow-up.
+- Do not expose raw JSON unless the user explicitly asks.
+- Do not claim you can call APIs yourself; the backend has already done it.
+- Keep the answer concise: 3-8 sentences unless the user asks for detail.
+"""
+
 
 class MiniMaxClient:
     """Async client that turns user queries into structured :class:`Intent`s.
@@ -321,10 +372,21 @@ class MiniMaxClient:
         self._client = client
         self._base_url = settings.MINIMAX_BASE_URL.rstrip("/")
         self._model = settings.MINIMAX_MODEL
+        self._chat_model = settings.minimax_chat_model
         self._headers = {
             "Authorization": f"Bearer {settings.MINIMAX_API_KEY}",
             "Content-Type": "application/json",
         }
+
+    @property
+    def planner_model(self) -> str:
+        """Model name used for planning/API-routing calls."""
+        return self._model
+
+    @property
+    def chat_model(self) -> str:
+        """Model name used for user-facing conversational calls."""
+        return self._chat_model
 
     # ------------------------------------------------------------------
     # Multi-agent pipeline methods
@@ -332,21 +394,42 @@ class MiniMaxClient:
 
     async def create_plan(self, message: str) -> "Plan":
         """Ask the LLM to produce a structured task list for *message*."""
+        plan, _request_json, _response_json = await self.create_plan_with_trace(
+            message
+        )
+        return plan
+
+    async def create_plan_with_trace(
+        self,
+        message: str,
+        history: list[dict[str, str]] | None = None,
+    ) -> tuple["Plan", dict[str, Any], dict[str, Any]]:
+        """Produce a plan and return the serialisable LLM request/response."""
         from app.services.models import Plan  # local import avoids cycles
 
-        content = await self._chat(
-            [
-                {"role": "system", "content": _PLANNER_PROMPT},
-                {"role": "user", "content": message},
-            ]
-        )
+        messages = self._planner_messages(message, history)
+        request_json = {
+            "model": self._model,
+            "temperature": 0.1,
+            "messages": messages,
+        }
+        content = await self._chat(messages, model=self._model, temperature=0.1)
         raw = self._extract_json(content)
         try:
-            return Plan.model_validate(raw)
+            plan = Plan.model_validate(raw)
         except ValidationError as exc:
             raise MiniMaxError(
                 f"Planner returned JSON that does not match the Plan schema: {exc}"
             ) from exc
+        repaired_plan = self._repair_plan_from_message(plan, message)
+        response_json: dict[str, Any] = {
+            "content": content,
+            "parsed": repaired_plan.model_dump(),
+        }
+        if repaired_plan.model_dump() != plan.model_dump():
+            response_json["raw_parsed"] = raw
+            response_json["repaired"] = True
+        return repaired_plan, request_json, response_json
 
     async def synthesize(self, message: str, results: list) -> str:
         """Ask the LLM to produce a human-readable summary of *results*."""
@@ -365,9 +448,100 @@ class MiniMaxClient:
                         f"User question: {message}\n\nTask results:\n{results_text}"
                     ),
                 },
-            ]
+            ],
+            model=self._model,
+            temperature=0.1,
         )
         return content.strip()
+
+    async def generate_title_with_trace(
+        self,
+        first_message: str,
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
+        """Generate a short conversation title with request/response trace."""
+        messages = [
+            {"role": "system", "content": _TITLE_PROMPT},
+            {"role": "user", "content": first_message},
+        ]
+        request_json = {
+            "model": self._chat_model,
+            "temperature": 0.2,
+            "messages": messages,
+        }
+        content = await self._chat(
+            messages,
+            model=self._chat_model,
+            temperature=0.2,
+        )
+        title = self._clean_title(content)
+        return title, request_json, {"content": content, "title": title}
+
+    async def generate_title(self, first_message: str) -> str:
+        """Generate a short conversation title."""
+        title, _request_json, _response_json = await self.generate_title_with_trace(
+            first_message
+        )
+        return title
+
+    async def generate_chat_response_with_trace(
+        self,
+        *,
+        history: list[dict[str, str]],
+        user_message: str,
+        plan: "Plan",
+        results: list["TaskResult"],
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
+        """Generate the final user-facing answer with request/response trace."""
+        plan_text = plan.model_dump()
+        results_text = [result.model_dump() for result in results]
+        messages = [
+            {"role": "system", "content": _CHAT_RESPONSE_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "history": history,
+                        "current_user_message": user_message,
+                        "plan": plan_text,
+                        "results": results_text,
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                    indent=2,
+                ),
+            },
+        ]
+        request_json = {
+            "model": self._chat_model,
+            "temperature": 0.2,
+            "messages": messages,
+        }
+        content = await self._chat(
+            messages,
+            model=self._chat_model,
+            temperature=0.2,
+        )
+        answer = content.strip()
+        return answer, request_json, {"content": content}
+
+    async def generate_chat_response(
+        self,
+        *,
+        history: list[dict[str, str]],
+        user_message: str,
+        plan: "Plan",
+        results: list["TaskResult"],
+    ) -> str:
+        """Generate the final user-facing answer."""
+        answer, _request_json, _response_json = (
+            await self.generate_chat_response_with_trace(
+                history=history,
+                user_message=user_message,
+                plan=plan,
+                results=results,
+            )
+        )
+        return answer
 
     # ------------------------------------------------------------------
     # Original single-intent classifier (kept for backward compatibility)
@@ -386,7 +560,9 @@ class MiniMaxClient:
             [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": message},
-            ]
+            ],
+            model=self._model,
+            temperature=0.1,
         )
         raw = self._extract_json(content)
         try:
@@ -396,7 +572,13 @@ class MiniMaxClient:
                 f"LLM returned JSON that does not match the Intent schema: {exc}"
             ) from exc
 
-    async def _chat(self, messages: list[dict[str, str]]) -> str:
+    async def _chat(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str,
+        temperature: float,
+    ) -> str:
         """Send a chat-completion request and return the assistant's content.
 
         Raises
@@ -406,10 +588,9 @@ class MiniMaxClient:
         """
         url = f"{self._base_url}/text/chatcompletion_v2"
         body: dict[str, Any] = {
-            "model": self._model,
+            "model": model,
             "messages": messages,
-            # Low temperature keeps the router deterministic.
-            "temperature": 0.1,
+            "temperature": temperature,
         }
 
         try:
@@ -466,3 +647,108 @@ class MiniMaxClient:
             raise MiniMaxError(
                 f"LLM output was not valid JSON: {exc}"
             ) from exc
+
+    @staticmethod
+    def _planner_messages(
+        message: str,
+        history: list[dict[str, str]] | None,
+    ) -> list[dict[str, str]]:
+        if not history:
+            user_content = message
+        else:
+            user_content = json.dumps(
+                {
+                    "conversation_history": history,
+                    "current_user_message": message,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        return [
+            {"role": "system", "content": _PLANNER_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
+
+    @staticmethod
+    def _clean_title(content: str) -> str:
+        title = content.strip().strip("\"'`").strip()
+        title = " ".join(title.split())
+        if title.endswith((".", ":", ";", ",")):
+            title = title[:-1].strip()
+        return title[:120] or "Nueva conversación"
+
+    @staticmethod
+    def _repair_plan_from_message(plan: Any, message: str) -> Any:
+        """Patch common planner degradations that would widen API searches."""
+        organism_name = MiniMaxClient._extract_named_organism(message)
+        if not organism_name:
+            return plan
+
+        repaired_tasks = []
+        changed = False
+        message_norm = _normalize_for_prompt_repair(message)
+        for task in plan.tasks:
+            if (
+                task.tool == "mp_orders_by_date"
+                and ("orden" in message_norm or "purchase order" in message_norm)
+            ):
+                parameters = {
+                    **task.parameters,
+                    "organism_name": organism_name,
+                }
+                repaired_tasks.append(
+                    task.model_copy(
+                        update={
+                            "tool": "mp_orders_by_org_and_date",
+                            "parameters": parameters,
+                            "description": (
+                                f"{task.description} for {organism_name}"
+                            ),
+                        }
+                    )
+                )
+                changed = True
+            elif (
+                task.tool == "mp_tenders_by_date"
+                and ("licit" in message_norm or "tender" in message_norm)
+            ):
+                parameters = {
+                    **task.parameters,
+                    "organism_name": organism_name,
+                }
+                repaired_tasks.append(
+                    task.model_copy(
+                        update={
+                            "tool": "mp_tenders_by_org",
+                            "parameters": parameters,
+                            "description": (
+                                f"{task.description} for {organism_name}"
+                            ),
+                        }
+                    )
+                )
+                changed = True
+            else:
+                repaired_tasks.append(task)
+
+        if not changed:
+            return plan
+        return plan.model_copy(update={"tasks": repaired_tasks})
+
+    @staticmethod
+    def _extract_named_organism(message: str) -> str | None:
+        match = re.search(
+            r"\b((?:i\.?\s*)?municipalidad\s+de\s+.+?)"
+            r"(?=\s+(?:para|por|entre|between|from|on|el\s+\d|la\s+\d)\b|$)",
+            message,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+        return " ".join(match.group(1).strip(" .,;:").split())
+
+
+def _normalize_for_prompt_repair(value: str) -> str:
+    text = unicodedata.normalize("NFKD", value)
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return text.lower()

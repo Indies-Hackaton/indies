@@ -6,3 +6,5 @@ pydantic-settings
 playwright
 beautifulsoup4
 pandas
+SQLAlchemy
+aiosqlite

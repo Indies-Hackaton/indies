@@ -1,36 +1,41 @@
 # Indies — Project Overview
 
-**What it is:** An anti-corruption audit chatbot for Chilean public procurement. Users ask natural-language questions; the system classifies the intent with an LLM and fetches real procurement data from the Chilean government's Mercado Público API.
+**What it is:** A conversational anti-corruption audit assistant for Chilean public data. Users ask natural-language questions; the backend plans the required API calls, executes them, stores the full conversation trace, and returns a human-readable answer.
 
 ---
 
 ## Architecture
 
 ```
-[Next.js Frontend]
+[curl / API client]
       |
-      | POST /api/v1/audit/query  { message: "..." }
+      | POST /api/v1/chat/messages  { conversation_id?, message }
       v
 [FastAPI Backend]
       |
-      |-- (1) MiniMax LLM  →  classify intent + extract params
-      |-- (2) Mercado Público API  →  fetch procurement data
+      |-- SQLite                    → conversations, messages, LLM traces, tool runs
+      |-- MiniMax Planner model      → structured API task plan
+      |-- Executor                   → Mercado Público + Senado API calls
+      |-- MiniMax Chat model         → natural-language response
       |
       v
-{ intent, data, detail }
+{ conversation, user_message, assistant_message, planner, tool_runs, total_records }
 ```
+
+`POST /api/v1/audit/query` remains available as a stateless compatibility endpoint for the older plan → execute → synthesize flow.
 
 ---
 
 ## Backend (`/backend`)
 
-**Stack:** Python · FastAPI · httpx · Pydantic v2 · pydantic-settings · uvicorn
+**Stack:** Python · FastAPI · httpx · Pydantic v2 · pydantic-settings · SQLAlchemy async · SQLite/aiosqlite · uvicorn
 
 ### Entry point
 `backend/app/main.py`
-- Creates the FastAPI app with a `lifespan` context that spins up a shared `httpx.AsyncClient` (connection pooling).
-- Mounts `MiniMaxClient` and `MercadoPublicoClient` onto `app.state` for DI.
-- Enables CORS for origins in `FRONTEND_ORIGINS` env var.
+- Creates a shared `httpx.AsyncClient`.
+- Creates the async database engine and runs `CREATE TABLE IF NOT EXISTS` at startup.
+- Mounts `MiniMaxClient`, `MercadoPublicoClient`, `SenadoClient`, and `db_sessionmaker` onto `app.state`.
+- Enables CORS for origins in `FRONTEND_ORIGINS`.
 
 ### Config
 `backend/app/core/config.py` — `Settings` (pydantic-settings, reads `.env`)
@@ -38,95 +43,156 @@
 | Variable | Default | Notes |
 |---|---|---|
 | `MINIMAX_API_KEY` | — | Required |
-| `MINIMAX_BASE_URL` | — | Required; example in `backend/.env.example`: `https://api.minimax.io/v1` |
-| `MINIMAX_MODEL` | — | Required; example in `backend/.env.example`: `MiniMax-Text-01` |
-| `MERCADO_PUBLICO_TICKET` | — | Required |
-| `MERCADO_PUBLICO_BASE_URL` | — | Required; example in `backend/.env.example`: `https://api.mercadopublico.cl/servicios/v1/publico` |
-| `FRONTEND_ORIGINS` | — | Required; comma-separated frontend origins allowed by CORS. Set this in production, e.g. `https://indies-99li.vercel.app`. Values are normalized, so accidental trailing slashes or full URLs are reduced to `scheme://host[:port]`. |
+| `MINIMAX_BASE_URL` | — | Required; example: `https://api.minimax.io/v1` |
+| `MINIMAX_MODEL` | — | Required planner/API-routing model |
+| `MINIMAX_CHAT_MODEL` | `MINIMAX_MODEL` | Optional user-facing conversational model |
+| `MERCADO_PUBLICO_TICKET` | — | Required Mercado Público ticket |
+| `MERCADO_PUBLICO_BASE_URL` | — | Required; example: `https://api.mercadopublico.cl/servicios/v1/publico` |
+| `FRONTEND_ORIGINS` | — | Required comma-separated CORS origins |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./data/indies.db` | Optional async SQLAlchemy URL for conversation persistence |
 
 ### API Routes
-`backend/app/api/routes.py` — prefix `/api/v1/audit`
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v1/audit/query` | Main endpoint — classify + fetch |
+| `POST` | `/api/v1/chat/messages` | Create/continue a persistent conversation turn |
+| `GET` | `/api/v1/chat/conversations` | List persisted conversations |
+| `GET` | `/api/v1/chat/conversations/{conversation_id}` | Get messages, LLM invocations, and tool runs for one conversation |
+| `POST` | `/api/v1/audit/query` | Stateless compatibility endpoint: plan → execute → synthesize |
+| `GET` | `/api/v1/senado/support-staff` | Direct Senate support-staff lookup |
 | `GET` | `/health` | Liveness probe |
 | `GET` | `/api/hello` | Legacy connectivity check |
 
-**Request body:**
-```json
-{ "message": "Show me purchase orders for organism 7239 on 2024-02-05" }
-```
+### `POST /api/v1/chat/messages`
 
-**Response:**
+Request:
 ```json
 {
-  "intent": {
-    "tool": "orders_by_org_and_date",
-    "parameters": { "codigoorg": "7239", "fecha": "05022024" },
-    "reasoning": "User specified both organism and date."
-  },
-  "data": { /* raw Mercado Público JSON */ },
-  "detail": null
+  "conversation_id": null,
+  "message": "Busca sistemas computacionales para la Municipalidad de Algarrobo entre enero y marzo 2024"
 }
 ```
 
+Response:
+```json
+{
+  "conversation": {
+    "id": "uuid",
+    "title": "Sistemas computacionales en Algarrobo",
+    "created_at": "2026-05-16T00:00:00Z",
+    "updated_at": "2026-05-16T00:00:00Z"
+  },
+  "user_message": {
+    "id": "uuid",
+    "conversation_id": "uuid",
+    "role": "user",
+    "content": "...",
+    "status": "completed",
+    "created_at": "2026-05-16T00:00:00Z",
+    "updated_at": "2026-05-16T00:00:00Z",
+    "linked_invocation_ids": [],
+    "linked_tool_run_ids": []
+  },
+  "assistant_message": {
+    "id": "uuid",
+    "conversation_id": "uuid",
+    "role": "assistant",
+    "content": "Encontré registros relevantes...",
+    "status": "completed",
+    "created_at": "2026-05-16T00:00:00Z",
+    "updated_at": "2026-05-16T00:00:00Z",
+    "linked_invocation_ids": ["planner-uuid", "chat-uuid"],
+    "linked_tool_run_ids": ["toolrun-uuid"]
+  },
+  "planner": {
+    "invocation_id": "planner-uuid",
+    "plan": {
+      "tasks": [],
+      "reasoning": "..."
+    }
+  },
+  "tool_runs": [],
+  "total_records": 0
+}
+```
+
+Errors:
+- `404` when `conversation_id` does not exist.
+- The endpoint generally persists failures as `assistant_message.status="failed"` when the Planner cannot produce a plan.
+
+### Persistence
+`backend/app/core/database.py`
+
+Local SQLite paths are prepared at startup: the parent directory is created if
+needed, and a local database file with missing user-write permission is made
+writable for development.
+
+| Table | Purpose |
+|---|---|
+| `conversations` | UUID conversation shell with generated title and timestamps |
+| `messages` | User/assistant messages with status (`processing`, `completed`, `failed`) |
+| `llm_invocations` | Title generation, Planner, and chat-response model calls; stores request/response JSON and error status |
+| `tool_runs` | One row per Planner task/API execution, linked to the assistant message and planner invocation |
+
+There is no auth yet; the conversation UUID is the access handle.
+
 ### Services
 
+#### `ChatService` (`backend/app/services/chat_service.py`)
+- Creates/reuses conversations.
+- Generates a title from the first user message with `MINIMAX_CHAT_MODEL`; falls back to a short slice of the message if title generation fails.
+- Persists user/assistant messages.
+- Calls the Planner model with recent conversation history.
+- Runs the existing `Executor` and stores every tool/API result as a `tool_run`.
+- Calls the chat model to produce the final natural-language answer.
+
 #### `MiniMaxClient` (`backend/app/services/minimax_client.py`)
-- Sends user message to MiniMax with a strict system prompt.
-- Model must reply with a single JSON object matching `Intent`:
-  - `tool`: one of the supported query intents listed below.
-  - `parameters.codigoorg` / `parameters.codigo_organismo`: organism code or `null`
-  - `parameters.fecha`: single date in `ddmmyyyy` or `null`
-  - `parameters.codigo`: tender code / Codigo de Licitacion or `null`
-  - `parameters.estado`: tender status name/code or `null`
-  - `parameters.codigo_proveedor`: supplier code or `null`
-  - `parameters.organism_name`: public organism name to resolve or `null`
-  - `parameters.keywords`: semantic product/service terms
-  - `parameters.start_date` / `parameters.end_date`: inclusive range bounds in `ddmmyyyy`
-  - `parameters.include_orders` / `parameters.include_tenders`: source flags for semantic range search
-  - `reasoning`: one-sentence explanation
-- Temperature `0.1` keeps routing deterministic.
-- Defensively strips markdown fences from LLM output.
+- `MINIMAX_MODEL`: structured Planner/API-routing and legacy synthesis.
+- `MINIMAX_CHAT_MODEL`: title generation and final user-facing responses.
+- Exposes trace-returning methods so chat persistence can store model requests/responses.
 
-#### `MercadoPublicoClient` (`backend/app/services/mercado_publico.py`)
-- Wraps `https://api.mercadopublico.cl/servicios/v1/publico`
-- Endpoints used: `ordenesdecompra.json`, `licitaciones.json`, and `Empresas/BuscarComprador`
-- Auth: `ticket` query param injected automatically.
-- Retries retryable Mercado Publico failures (`429`, `500`, `502`, `503`, `504`) before surfacing a `502` from the API route.
-- Resolves named public organisms via `BuscarComprador`; if several municipality/corporation entities match, the backend returns an ambiguity payload instead of guessing.
+#### `Executor` (`backend/app/services/executor.py`)
+Runs Planner tasks concurrently. Supported tools:
 
-| Method | Mercado Público params |
+| Tool | Required params |
 |---|---|
-| `get_orders_by_org_and_date(codigoorg, fecha)` | `CodigoOrganismo` + `fecha` |
-| `get_orders_by_date(fecha)` | `fecha` only |
-| `lookup_public_organisms()` | `ticket` only against `Empresas/BuscarComprador` |
-| `resolve_public_organism(name)` | Local resolution over `BuscarComprador` results |
-| `get_tender_by_code(codigo)` | `codigo` |
-| `get_tenders_current_day()` | `ticket` only against `licitaciones.json` |
-| `get_tenders_by_date(fecha)` | `fecha` |
-| `get_tenders_by_status_and_date(fecha, estado)` | `fecha` + normalized `estado` |
-| `get_tenders_by_supplier_and_date(fecha, codigo_proveedor)` | `fecha` + `CodigoProveedor` |
-| `get_tenders_by_org_and_date(codigo_organismo, fecha)` | `fecha` + `CodigoOrganismo` |
+| `senado_support_staff` | `year`, `month_es`, optional `senator_name`, `staff_name` |
+| `mp_orders_by_org_and_date` | `fecha` + `codigoorg` or `organism_name` |
+| `mp_orders_by_date` | `fecha` |
+| `mp_tender_by_codigo` | `codigo` |
+| `mp_tenders_today` | — |
+| `mp_tenders_by_date` | `fecha` |
+| `mp_tenders_by_status` | `fecha`, `estado` |
+| `mp_tenders_by_supplier` | `fecha`, `CodigoProveedor` |
+| `mp_tenders_by_org` | `fecha` + `codigo_organismo` or `organism_name` |
+| `mp_search_buyers` | — |
+| `mp_resolve_organism` | `organism_name` |
+| `mp_semantic_range` | `organism_name`, `start_date`, `end_date`, `keywords`, optional `include_tenders`, `include_orders` |
 
-#### Semantic range workflow (`backend/app/api/routes.py`)
-- `semantic_org_date_range_search` is implemented in the route layer because it orchestrates multiple Mercado Publico calls.
-- Requires `start_date`, `end_date`, keywords, and either an organism code or `organism_name`.
-- Expands the inclusive date range, capped at 366 days.
-- Queries tenders by default. It also queries purchase orders when `include_orders` is `true`.
-- Filters returned records with `pandas` across descriptive columns such as name, description, product, category, item, acquisition, tender and glossary fields.
+`mp_semantic_range` normalizes accents and expands computational keywords with
+common Spanish singular/plural variants such as `sistemas informaticos` →
+`sistema informatico`, so records like `SISTEMA INFORMÁTICO ...` are retained.
+
+Single-date organism tools also accept `organism_name`; the Executor resolves
+the name through Mercado Público before calling `ordenesdecompra.json` or
+`licitaciones.json`. This prevents named-organism requests from widening into
+date-only searches.
+
+#### External services
+- Mercado Público API: authenticated with `ticket` query param.
+- Senado de Chile transparency API: unauthenticated Strapi REST endpoint.
+- MiniMax: OpenAI-compatible chat-completion endpoint.
 
 ---
 
 ## Frontend (`/frontend`)
 
-**Stack:** Next.js (App Router) · TypeScript · vanilla CSS custom properties
+**Stack:** Next.js (App Router) · TypeScript · vanilla CSS modules
 
-- `NEXT_PUBLIC_API_URL` env var points to backend (default `http://localhost:8000`).
-- Home page is a chat-style audit UI that sends questions to `POST /api/v1/audit/query`.
-- Renders a receipt per query with the original question, model intent, Mercado Público query and returned data.
-- Design tokens in `globals.css`: `--accent: #0f766e` (teal), `--background: #f7f7f2` (off-white).
+- `NEXT_PUBLIC_API_URL` points to the backend, defaulting to `http://localhost:8000`.
+- The current frontend is unchanged and still uses the older `/api/v1/audit/query` contract.
+- The persistent chat API is backend-only for now and should be tested with `curl` or another API client.
+- A later frontend pass can adopt `/api/v1/chat/messages`, store the active `conversation_id`, and render assistant messages plus linked traces.
 
 ---
 
@@ -135,33 +201,42 @@
 ```bash
 # Backend
 cd backend
-cp .env.example .env   # fill in MINIMAX_API_KEY + MERCADO_PUBLICO_TICKET
+cp .env.example .env
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 
 # Frontend
 cd frontend
-cp .env.local.example .env.local
 npm install
 npm run dev
 ```
 
----
+## Testing the chat API with curl
 
-## Supported query intents
+Create a conversation:
 
-| Intent tool | Required params | Example question |
-|---|---|---|
-| `orders_by_org_and_date` | `fecha` + `codigoorg`, `codigo_organismo`, or `organism_name` | "Show orders for organism 7239 on Feb 5 2024" |
-| `orders_by_date` | `fecha` | "Show all orders from 05/02/2024" |
-| `public_organism_lookup` | optional `organism_name` | "Verify the public organism for Municipalidad de Algarrobo" |
-| `tender_by_code` | `codigo` | "Find tender 1509-5-L114" |
-| `tenders_current_day` | — | "What tenders are available today?" |
-| `tenders_by_date` | `fecha` | "Show tenders from 05/02/2024" |
-| `tenders_by_status_and_date` | `fecha` + `estado` | "Show adjudicated tenders from 05/02/2024" |
-| `tenders_by_supplier_and_date` | `fecha` + `codigo_proveedor` | "Show supplier 76543210 tenders from 05/02/2024" |
-| `tenders_by_org_and_date` | `fecha` + `codigoorg`, `codigo_organismo`, or `organism_name` | "Show Municipalidad de Algarrobo tenders from 05/02/2024" |
-| `semantic_org_date_range_search` | `start_date` + `end_date` + keywords + organism | "Find computer systems for Municipalidad de Algarrobo between January and March 2024" |
-| `unknown` | — | Unrecognized / incomplete requests |
+```bash
+curl -sS http://localhost:8000/api/v1/chat/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": null,
+    "message": "Busca sistemas computacionales para la Municipalidad de Algarrobo entre enero y marzo 2024"
+  }'
+```
 
-For detailed agent capabilities and full request/response examples, see `specs.md`.
+Continue the same conversation:
+
+```bash
+curl -sS http://localhost:8000/api/v1/chat/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "<uuid-devuelto>",
+    "message": "Ahora incluye también órdenes de compra"
+  }'
+```
+
+Fetch the full trace:
+
+```bash
+curl -sS http://localhost:8000/api/v1/chat/conversations/<uuid-devuelto>
+```
