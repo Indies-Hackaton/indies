@@ -7,6 +7,7 @@ strongly-typed :class:`Settings` instance.
 """
 
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -30,28 +31,26 @@ class Settings(BaseSettings):
     # --- MiniMax LLM -------------------------------------------------------
     # API key used to authenticate against the MiniMax reasoning engine.
     MINIMAX_API_KEY: str
-    # Base URL of the MiniMax API; defaults to the official global endpoint.
-    MINIMAX_BASE_URL: str = "https://api.minimax.io/v1"
+    # Base URL of the MiniMax API.
+    MINIMAX_BASE_URL: str
     # Chat model used as the intent router/classifier.
-    MINIMAX_MODEL: str = "MiniMax-Text-01"
+    MINIMAX_MODEL: str
 
     # --- Mercado Publico (Chilean government procurement API) --------------
     # Ticket (token) required by every Mercado Publico request.
     MERCADO_PUBLICO_TICKET: str
     # Base URL for the public v1 services of Mercado Publico.
-    MERCADO_PUBLICO_BASE_URL: str = (
-        "https://api.mercadopublico.cl/servicios/v1/publico"
-    )
+    MERCADO_PUBLICO_BASE_URL: str
 
     # --- CORS --------------------------------------------------------------
     # Comma-separated list of origins allowed to call this API.
-    FRONTEND_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    FRONTEND_ORIGINS: str
 
     @property
     def allowed_origins(self) -> list[str]:
         """Return ``FRONTEND_ORIGINS`` as a clean list of origin strings."""
         return [
-            origin.strip()
+            _normalise_origin(origin)
             for origin in self.FRONTEND_ORIGINS.split(",")
             if origin.strip()
         ]
@@ -65,3 +64,12 @@ def get_settings() -> Settings:
     ``.env`` file is parsed only once per process.
     """
     return Settings()
+
+
+def _normalise_origin(origin: str) -> str:
+    """Convert a full URL or trailing-slash URL into a CORS origin."""
+    cleaned = origin.strip()
+    parsed = urlsplit(cleaned)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return cleaned.rstrip("/")

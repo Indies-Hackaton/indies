@@ -38,11 +38,11 @@
 | Variable | Default | Notes |
 |---|---|---|
 | `MINIMAX_API_KEY` | — | Required |
-| `MINIMAX_BASE_URL` | `https://api.minimax.io/v1` | |
-| `MINIMAX_MODEL` | `MiniMax-Text-01` | |
+| `MINIMAX_BASE_URL` | — | Required; example in `backend/.env.example`: `https://api.minimax.io/v1` |
+| `MINIMAX_MODEL` | — | Required; example in `backend/.env.example`: `MiniMax-Text-01` |
 | `MERCADO_PUBLICO_TICKET` | — | Required |
-| `MERCADO_PUBLICO_BASE_URL` | `https://api.mercadopublico.cl/servicios/v1/publico` | |
-| `FRONTEND_ORIGINS` | `http://localhost:3000,...` | Comma-separated |
+| `MERCADO_PUBLICO_BASE_URL` | — | Required; example in `backend/.env.example`: `https://api.mercadopublico.cl/servicios/v1/publico` |
+| `FRONTEND_ORIGINS` | — | Required; comma-separated frontend origins allowed by CORS. Set this in production, e.g. `https://indies-99li.vercel.app`. Values are normalized, so accidental trailing slashes or full URLs are reduced to `scheme://host[:port]`. |
 
 ### API Routes
 `backend/app/api/routes.py` — prefix `/api/v1/audit`
