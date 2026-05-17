@@ -3,17 +3,18 @@
 import { useState } from "react";
 import { useConversation } from "@/hooks/useConversation";
 import { useConversations } from "@/hooks/useConversations";
-import type { ChatTurn } from "@/lib/types";
+import { deleteConversation, renameConversation } from "@/lib/api";
 import { ChatArea } from "@/components/ChatArea";
-import { ReceiptPanel } from "@/components/ReceiptPanel";
+import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { Sidebar } from "@/components/Sidebar";
 import styles from "./page.module.css";
 
 export default function Home() {
   const conversation = useConversation();
   const conversations = useConversations();
-  const [panelTurn, setPanelTurn] = useState<ChatTurn | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   async function handleSubmit(message: string) {
     await conversation.sendMessage(message);
@@ -21,17 +22,42 @@ export default function Home() {
   }
 
   function handleSelectConversation(id: string) {
-    setPanelTurn(null);
     conversation.loadConversation(id);
-    // On mobile, close sidebar after selecting a conversation.
     if (window.innerWidth < 768) setSidebarOpen(false);
   }
 
   function handleNewConversation() {
-    setPanelTurn(null);
     conversation.reset();
     if (window.innerWidth < 768) setSidebarOpen(false);
   }
+
+  async function handleRename(id: string, newTitle: string) {
+    await renameConversation(id, newTitle);
+    if (id === conversation.conversationId) {
+      conversation.updateTitle(newTitle);
+    }
+    conversations.refresh();
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteId) return;
+    setIsDeleting(true);
+    try {
+      await deleteConversation(pendingDeleteId);
+      if (pendingDeleteId === conversation.conversationId) {
+        conversation.reset();
+      }
+      conversations.refresh();
+    } finally {
+      setIsDeleting(false);
+      setPendingDeleteId(null);
+    }
+  }
+
+  const pendingDeleteTitle =
+    conversations.conversations.find((c) => c.id === pendingDeleteId)?.title ??
+    conversation.conversationTitle ??
+    "esta conversación";
 
   return (
     <div className={styles.page}>
@@ -39,7 +65,6 @@ export default function Home() {
       {/* ── Header ── */}
       <header className={styles.header}>
         <div className={styles.headerLeft}>
-          {/* Mobile hamburger — hidden on desktop */}
           <button
             className={styles.hamburger}
             type="button"
@@ -70,7 +95,6 @@ export default function Home() {
       {/* ── Body ── */}
       <div className={styles.body}>
 
-        {/* Mobile backdrop — closes sidebar when tapped */}
         {sidebarOpen && (
           <div
             className={styles.backdrop}
@@ -79,7 +103,6 @@ export default function Home() {
           />
         )}
 
-        {/* Sidebar */}
         <div className={`${styles.sidebarCol} ${sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed}`}>
           <Sidebar
             conversations={conversations.conversations}
@@ -89,31 +112,43 @@ export default function Home() {
             onToggle={() => setSidebarOpen((v) => !v)}
             onSelect={handleSelectConversation}
             onNew={handleNewConversation}
+            onRename={handleRename}
+            onDeleteRequest={setPendingDeleteId}
           />
         </div>
 
-        {/* Chat */}
         <div className={styles.chatCol}>
           <ChatArea
             turns={conversation.turns}
             isLoading={conversation.isLoading}
             title={conversation.conversationTitle}
             onSubmit={handleSubmit}
-            onOpenPanel={setPanelTurn}
+            onRename={(newTitle) =>
+              conversation.conversationId
+                ? handleRename(conversation.conversationId, newTitle)
+                : Promise.resolve()
+            }
+            onDelete={() => {
+              if (conversation.conversationId) {
+                setPendingDeleteId(conversation.conversationId);
+              }
+              return Promise.resolve();
+            }}
           />
         </div>
 
-        {/* Receipt panel */}
-        {panelTurn && (
-          <div className={styles.panelCol}>
-            <ReceiptPanel
-              turn={panelTurn}
-              onClose={() => setPanelTurn(null)}
-            />
-          </div>
-        )}
-
       </div>
+
+      {/* ── Delete confirmation modal ── */}
+      {pendingDeleteId && (
+        <ConfirmDeleteModal
+          title={pendingDeleteTitle}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDeleteId(null)}
+          isLoading={isDeleting}
+        />
+      )}
+
     </div>
   );
 }

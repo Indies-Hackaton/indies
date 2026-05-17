@@ -109,12 +109,6 @@
   overflow: hidden;
 }
 
-/* ── Receipt panel column ────────────────────────────────────────── */
-.panelCol {
-  width: 400px;
-  flex-shrink: 0;
-  overflow: hidden;
-}
 
 /* ── Mobile backdrop ─────────────────────────────────────────────── */
 .backdrop {
@@ -122,9 +116,6 @@
 }
 
 /* ── Responsive ──────────────────────────────────────────────────── */
-@media (max-width: 1100px) {
-  .panelCol { width: 340px; }
-}
 
 @media (max-width: 768px) {
   .hamburger { display: block; }
@@ -154,8 +145,6 @@
     background: rgba(0, 0, 0, 0.45);
     z-index: 25;
   }
-
-  .panelCol { display: none; }
 
   .header { padding: 10px 16px; }
 }

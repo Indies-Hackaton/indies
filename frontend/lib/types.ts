@@ -30,13 +30,21 @@ export interface ConversationOut {
   title: string;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
 }
+
+export interface ConversationRenameRequest {
+  title: string;
+}
+
+export type TextFormat = "plain_text" | "markdown";
 
 export interface MessageOut {
   id: string;
   conversation_id: string;
   role: "user" | "assistant";
   content: string;
+  content_format: TextFormat;
   status: "processing" | "completed" | "failed";
   created_at: string;
   updated_at: string;

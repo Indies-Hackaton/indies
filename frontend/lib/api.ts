@@ -2,6 +2,7 @@ import type {
   ChatMessageResponse,
   ConversationDetailResponse,
   ConversationListItem,
+  ConversationOut,
 } from "./types";
 
 export class ApiError extends Error {
@@ -71,4 +72,23 @@ export function getConversation(
   return request<ConversationDetailResponse>(
     `/api/v1/chat/conversations/${conversationId}`,
   );
+}
+
+export function renameConversation(
+  conversationId: string,
+  title: string,
+): Promise<ConversationOut> {
+  return request<ConversationOut>(
+    `/api/v1/chat/conversations/${conversationId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    },
+  );
+}
+
+export function deleteConversation(conversationId: string): Promise<void> {
+  return request<void>(`/api/v1/chat/conversations/${conversationId}`, {
+    method: "DELETE",
+  });
 }
