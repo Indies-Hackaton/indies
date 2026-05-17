@@ -6,9 +6,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -32,6 +38,9 @@ class ConversationRecord(Base):
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
     messages: Mapped[list["MessageRecord"]] = relationship(
         back_populates="conversation",
@@ -176,6 +185,20 @@ async def init_db(engine: AsyncEngine) -> None:
     """Create tables if they do not already exist."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if conn.sync_connection.dialect.name == "sqlite":
+            await _ensure_sqlite_conversation_deleted_at(conn)
+
+
+async def _ensure_sqlite_conversation_deleted_at(conn: AsyncConnection) -> None:
+    """Add the soft-delete column to existing SQLite databases."""
+    result = await conn.execute(text("PRAGMA table_info(conversations)"))
+    columns = result.fetchall()
+    if any(column[1] == "deleted_at" for column in columns):
+        return
+
+    await conn.execute(
+        text("ALTER TABLE conversations ADD COLUMN deleted_at DATETIME DEFAULT NULL")
+    )
 
 
 def _prepare_sqlite_path(database_url: str) -> None:

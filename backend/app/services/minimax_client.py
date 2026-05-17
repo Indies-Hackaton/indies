@@ -358,6 +358,9 @@ You generate short titles for audit conversations.
 
 Rules:
 - Use the same language as the user's first message.
+- Describe the topic of the user's request, not the outcome or your response.
+- If the request is unclear, use a generic descriptive title about the request.
+- Never mention your limitations, missing data, errors, or inability to answer.
 - Return plain text only — no markdown of any kind.
 - Do NOT use #, ##, *, **, _, __, `, or any other markdown syntax anywhere.
 - Maximum 8 words.
@@ -527,7 +530,7 @@ class MiniMaxClient:
             temperature=0.2,
         )
         title = self._clean_title(content)
-        if self._title_needs_fallback(title):
+        if self._title_needs_fallback(title, content):
             title = self._fallback_title_from_message(first_message)
         return title, request_json, {"content": content, "title": title}
 
@@ -754,8 +757,10 @@ class MiniMaxClient:
         return " ".join(words)[:80] or "Nueva conversación"
 
     @staticmethod
-    def _title_needs_fallback(title: str) -> bool:
+    def _title_needs_fallback(title: str, raw_content: str | None = None) -> bool:
         normalized = _normalize_for_prompt_repair(title)
+        raw_normalized = _normalize_for_prompt_repair(raw_content or title)
+        raw_words = raw_normalized.split()
         bad_starts = (
             "voy ",
             "he ",
@@ -765,13 +770,46 @@ class MiniMaxClient:
             "buscare",
             "busca ",
             "buscar ",
+            "limitacion ",
+            "limitaciones ",
+            "no puedo ",
+            "no tengo ",
+            "no dispongo ",
+            "no cuento ",
+            "lo siento ",
+            "lamento ",
+            "i cannot ",
+            "i can't ",
+            "i am unable ",
+            "i'm unable ",
+            "sorry ",
+            "as an ai ",
+        )
+        answer_markers = (
+            "no puedo realizar",
+            "no puedo responder",
+            "no tengo acceso",
+            "no dispongo de acceso",
+            "no cuento con acceso",
+            "bases de datos en tiempo real",
+            "como modelo",
+            "mis capacidades",
+            "i do not have access",
+            "i don't have access",
+            "cannot perform",
         )
         return (
             not title
             or title == "Nueva conversación"
             or normalized.startswith(bad_starts)
+            or raw_normalized.startswith(bad_starts)
             or "permiteme" in normalized
+            or "permiteme" in raw_normalized
             or "tool_call" in normalized
+            or "tool_call" in raw_normalized
+            or any(marker in raw_normalized for marker in answer_markers)
+            or len(raw_words) > 16
+            or len((raw_content or title).strip()) > 120
         )
 
     @staticmethod

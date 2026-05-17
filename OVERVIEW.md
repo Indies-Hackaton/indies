@@ -59,6 +59,8 @@
 | `POST` | `/api/v1/chat/messages` | Create/continue a persistent conversation turn |
 | `GET` | `/api/v1/chat/conversations` | List persisted conversations |
 | `GET` | `/api/v1/chat/conversations/{conversation_id}` | Get messages, LLM invocations, and tool runs for one conversation |
+| `PATCH` | `/api/v1/chat/conversations/{conversation_id}` | Rename a conversation |
+| `DELETE` | `/api/v1/chat/conversations/{conversation_id}` | Soft-delete a conversation |
 | `POST` | `/api/v1/audit/query` | Stateless compatibility endpoint: plan → execute → synthesize |
 | `GET` | `/api/v1/senado/support-staff` | Direct Senate support-staff lookup |
 | `GET` | `/health` | Liveness probe |
@@ -81,7 +83,8 @@ Response:
     "id": "uuid",
     "title": "Sistemas computacionales en Algarrobo",
     "created_at": "2026-05-16T00:00:00Z",
-    "updated_at": "2026-05-16T00:00:00Z"
+    "updated_at": "2026-05-16T00:00:00Z",
+    "deleted_at": null
   },
   "user_message": {
     "id": "uuid",
@@ -120,7 +123,7 @@ Response:
 ```
 
 Errors:
-- `404` when `conversation_id` does not exist.
+- `404` when `conversation_id` does not exist or has been soft-deleted.
 - The endpoint generally persists failures as `assistant_message.status="failed"` when the Planner cannot produce a plan.
 
 Rendering marker:
@@ -131,6 +134,55 @@ Rendering marker:
   a Markdown renderer. When it is `"plain_text"`, render the string normally.
 - The backend computes this marker from the generated/stored text; it does not
   mutate `content`.
+
+### `GET /api/v1/chat/conversations`
+
+Returns active, non-deleted conversations ordered by `updated_at` descending.
+Each item is a `ConversationListItem`:
+
+```json
+{
+  "id": "uuid",
+  "title": "Sistemas computacionales en Algarrobo",
+  "created_at": "2026-05-16T00:00:00Z",
+  "updated_at": "2026-05-16T00:00:00Z",
+  "deleted_at": null,
+  "last_message": null,
+  "message_count": 0
+}
+```
+
+### `GET /api/v1/chat/conversations/{conversation_id}`
+
+Returns a full active, non-deleted conversation with `conversation`, `messages`,
+`llm_invocations`, and `tool_runs`. Returns `404` when the conversation does not
+exist or has `deleted_at` set.
+
+### `PATCH /api/v1/chat/conversations/{conversation_id}`
+
+Request:
+```json
+{
+  "title": "Nuevo título"
+}
+```
+
+Response: `ConversationOut` with the updated `title`, refreshed `updated_at`,
+and `deleted_at: null`.
+
+Errors:
+- `404` when the conversation does not exist or has been soft-deleted.
+- `422` when `title` is empty or longer than 160 characters.
+
+### `DELETE /api/v1/chat/conversations/{conversation_id}`
+
+Soft-deletes the conversation by setting `conversations.deleted_at = utc_now()`.
+Messages, LLM invocations, and tool runs are preserved for audit/recovery.
+
+Response: `204 No Content`.
+
+Errors:
+- `404` when the conversation does not exist or has already been soft-deleted.
 
 ### `POST /api/v1/audit/query`
 
@@ -170,17 +222,22 @@ writable for development.
 
 | Table | Purpose |
 |---|---|
-| `conversations` | UUID conversation shell with generated title and timestamps |
+| `conversations` | UUID conversation shell with generated/renamable title, timestamps, and nullable `deleted_at` for soft delete |
 | `messages` | User/assistant messages with status (`processing`, `completed`, `failed`) |
 | `llm_invocations` | Title generation, Planner, and chat-response model calls; stores request/response JSON and error status |
 | `tool_runs` | One row per Planner task/API execution, linked to the assistant message and planner invocation |
 
 There is no auth yet; the conversation UUID is the access handle.
+Soft-deleted conversations are excluded from list/detail/continue/rename/delete
+operations, but their messages and trace rows remain in the database.
 
 ### Services
 
 #### `ChatService` (`backend/app/services/chat_service.py`)
 - Creates/reuses conversations.
+- Lists and fetches only active conversations (`deleted_at IS NULL`).
+- Renames conversations by updating `title` and `updated_at`.
+- Soft-deletes conversations by setting `deleted_at`; it does not delete messages or traces.
 - Generates a title from the first user message with `MINIMAX_CHAT_MODEL`; falls back to a short slice of the message if title generation fails.
 - Persists user/assistant messages.
 - Calls the Planner model with recent conversation history.
@@ -198,7 +255,8 @@ There is no auth yet; the conversation UUID is the access handle.
   or licitaciones over a date range, the backend rewrites the plan to
   `mp_semantic_range` with the extracted organism, range, and include flags.
 - Cleans generated titles and falls back to a short title from the first user
-  message when the chat model returns an assistant-style sentence.
+  message when the chat model returns markdown, an assistant-style sentence, an
+  inability/error response body, or an overlong non-title.
 - Sanitizes chat responses that contain pseudo tool-call syntax and replaces
   them with a grounded fallback based on the executed `TaskResult` objects.
 
@@ -270,9 +328,9 @@ Local CSV store for Contraloría General de la República audit data. Loaded onc
 **Stack:** Next.js (App Router) · TypeScript · vanilla CSS modules
 
 - `NEXT_PUBLIC_API_URL` points to the backend, defaulting to `http://localhost:8000`.
-- The current frontend is unchanged and still uses the older `/api/v1/audit/query` contract.
-- The persistent chat API is backend-only for now and should be tested with `curl` or another API client.
-- A later frontend pass can adopt `/api/v1/chat/messages`, store the active `conversation_id`, and render assistant messages plus linked traces.
+- The frontend uses `/api/v1/chat/messages` for persistent turns and `/api/v1/chat/conversations` for the sidebar/history flow.
+- `frontend/lib/types.ts` mirrors backend chat response types, including `ConversationOut.deleted_at`.
+- `frontend/lib/api.ts` exposes helpers for send, list, get, rename, and soft-delete conversation endpoints.
 
 ---
 
@@ -319,4 +377,18 @@ Fetch the full trace:
 
 ```bash
 curl -sS http://localhost:8000/api/v1/chat/conversations/<uuid-devuelto>
+```
+
+Rename the conversation:
+
+```bash
+curl -sS -X PATCH http://localhost:8000/api/v1/chat/conversations/<uuid-devuelto> \
+  -H "Content-Type: application/json" \
+  -d '{ "title": "Nuevo título" }'
+```
+
+Soft-delete the conversation:
+
+```bash
+curl -sS -X DELETE -i http://localhost:8000/api/v1/chat/conversations/<uuid-devuelto>
 ```

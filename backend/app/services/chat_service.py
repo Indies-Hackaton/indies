@@ -222,9 +222,9 @@ class ChatService:
         """Return conversations ordered by recent activity."""
         rows = (
             await self._session.scalars(
-                select(ConversationRecord).order_by(
-                    ConversationRecord.updated_at.desc()
-                )
+                select(ConversationRecord)
+                .where(ConversationRecord.deleted_at.is_(None))
+                .order_by(ConversationRecord.updated_at.desc())
             )
         ).all()
         items: list[ConversationListItem] = []
@@ -255,9 +255,7 @@ class ChatService:
 
     async def get_conversation(self, conversation_id: str) -> ConversationDetailResponse:
         """Return a persisted conversation with messages and traces."""
-        conversation = await self._session.get(ConversationRecord, conversation_id)
-        if not conversation:
-            raise ChatNotFoundError(f"Conversation {conversation_id!r} not found.")
+        conversation = await self._get_active_conversation(conversation_id)
 
         messages = (
             await self._session.scalars(
@@ -307,6 +305,24 @@ class ChatService:
             tool_runs=[_tool_run_out(row) for row in tool_runs],
         )
 
+    async def rename_conversation(
+        self,
+        conversation_id: str,
+        title: str,
+    ) -> ConversationOut:
+        """Rename an active conversation."""
+        conversation = await self._get_active_conversation(conversation_id)
+        conversation.title = title
+        conversation.updated_at = utc_now()
+        await self._session.commit()
+        return _conversation_out(conversation)
+
+    async def delete_conversation(self, conversation_id: str) -> None:
+        """Soft-delete an active conversation while preserving its audit trail."""
+        conversation = await self._get_active_conversation(conversation_id)
+        conversation.deleted_at = utc_now()
+        await self._session.commit()
+
     async def _get_or_create_conversation(
         self,
         *,
@@ -314,10 +330,7 @@ class ChatService:
         first_message: str,
     ) -> ConversationRecord:
         if conversation_id:
-            conversation = await self._session.get(ConversationRecord, conversation_id)
-            if not conversation:
-                raise ChatNotFoundError(f"Conversation {conversation_id!r} not found.")
-            return conversation
+            return await self._get_active_conversation(conversation_id)
 
         conversation = ConversationRecord(
             id=_new_id(),
@@ -327,6 +340,16 @@ class ChatService:
         )
         self._session.add(conversation)
         await self._session.commit()
+        return conversation
+
+    async def _get_active_conversation(self, conversation_id: str) -> ConversationRecord:
+        conversation = await self._session.scalar(
+            select(ConversationRecord)
+            .where(ConversationRecord.id == conversation_id)
+            .where(ConversationRecord.deleted_at.is_(None))
+        )
+        if not conversation:
+            raise ChatNotFoundError(f"Conversation {conversation_id!r} not found.")
         return conversation
 
     async def _generate_and_store_title(
@@ -460,9 +483,10 @@ class ChatService:
         assistant_message.content = content
         assistant_message.status = status
         assistant_message.updated_at = utc_now()
-        conversation = await self._session.get(
-            ConversationRecord,
-            assistant_message.conversation_id,
+        conversation = await self._session.scalar(
+            select(ConversationRecord)
+            .where(ConversationRecord.id == assistant_message.conversation_id)
+            .where(ConversationRecord.deleted_at.is_(None))
         )
         if conversation:
             conversation.updated_at = utc_now()
@@ -516,6 +540,7 @@ def _conversation_out(row: ConversationRecord) -> ConversationOut:
         title=row.title,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        deleted_at=row.deleted_at,
     )
 
 
