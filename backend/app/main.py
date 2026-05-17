@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.minimax_client = MiniMaxClient(settings, http_client)
     app.state.mercado_publico_client = MercadoPublicoClient(settings, http_client)
     app.state.senado_client = SenadoClient(http_client)
-    app.state.contraloria = await ContraloriaService.create(settings.CONTRALORIA_DATABASE_URL)
+    app.state.contraloria = await ContraloriaService.create(settings.DATABASE_URL)
     app.state.camara = CamaraService(
         pool=app.state.contraloria._pool,  # reuse the same Neon pool
     )
