@@ -87,6 +87,7 @@ Response:
     "conversation_id": "uuid",
     "role": "user",
     "content": "...",
+    "content_format": "plain_text",
     "status": "completed",
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
@@ -98,6 +99,7 @@ Response:
     "conversation_id": "uuid",
     "role": "assistant",
     "content": "Encontré registros relevantes...",
+    "content_format": "plain_text",
     "status": "completed",
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
@@ -119,6 +121,44 @@ Response:
 Errors:
 - `404` when `conversation_id` does not exist.
 - The endpoint generally persists failures as `assistant_message.status="failed"` when the Planner cannot produce a plan.
+
+Rendering marker:
+- `user_message.content_format`, `assistant_message.content_format`, and
+  `messages[].content_format` in conversation-detail responses are either
+  `"plain_text"` or `"markdown"`.
+- When the value is `"markdown"`, the frontend should render `content` through
+  a Markdown renderer. When it is `"plain_text"`, render the string normally.
+- The backend computes this marker from the generated/stored text; it does not
+  mutate `content`.
+
+### `POST /api/v1/audit/query`
+
+Request:
+```json
+{
+  "message": "Analiza las compras de una municipalidad"
+}
+```
+
+Response:
+```json
+{
+  "plan": {
+    "tasks": [],
+    "reasoning": "..."
+  },
+  "results": [],
+  "synthesis": "Encontré registros relevantes...",
+  "synthesis_format": "plain_text",
+  "total_records": 0
+}
+```
+
+Rendering marker:
+- `synthesis_format` is either `"plain_text"` or `"markdown"`.
+- When `synthesis_format` is `"markdown"`, the frontend should render
+  `synthesis` through a Markdown renderer. When it is `"plain_text"`, render it
+  normally.
 
 ### Persistence
 `backend/app/core/database.py`
@@ -144,12 +184,22 @@ There is no auth yet; the conversation UUID is the access handle.
 - Persists user/assistant messages.
 - Calls the Planner model with recent conversation history.
 - Runs the existing `Executor` and stores every tool/API result as a `tool_run`.
-- Calls the chat model to produce the final natural-language answer.
+- Calls the chat model to produce the final natural-language answer. The
+  assistant response is expected to describe already executed results, not to
+  emit `[TOOL_CALL]` blocks or future API-call instructions.
 
 #### `MiniMaxClient` (`backend/app/services/minimax_client.py`)
 - `MINIMAX_MODEL`: structured Planner/API-routing and legacy synthesis.
 - `MINIMAX_CHAT_MODEL`: title generation and final user-facing responses.
 - Exposes trace-returning methods so chat persistence can store model requests/responses.
+- Repairs common Planner degradations before execution. For example, if the
+  Planner only resolves `Municipalidad de Maipú` but the user asked for compras
+  or licitaciones over a date range, the backend rewrites the plan to
+  `mp_semantic_range` with the extracted organism, range, and include flags.
+- Cleans generated titles and falls back to a short title from the first user
+  message when the chat model returns an assistant-style sentence.
+- Sanitizes chat responses that contain pseudo tool-call syntax and replaces
+  them with a grounded fallback based on the executed `TaskResult` objects.
 
 #### `Executor` (`backend/app/services/executor.py`)
 Runs Planner tasks concurrently. Supported tools:
@@ -172,6 +222,9 @@ Runs Planner tasks concurrently. Supported tools:
 `mp_semantic_range` normalizes accents and expands computational keywords with
 common Spanish singular/plural variants such as `sistemas informaticos` →
 `sistema informatico`, so records like `SISTEMA INFORMÁTICO ...` are retained.
+It also supports `keywords: []` for broad organism/date-range reviews, such as
+questions asking for potentially suspicious purchases or tenders without a
+specific product category.
 
 Single-date organism tools also accept `organism_name`; the Executor resolves
 the name through Mercado Público before calling `ordenesdecompra.json` or

@@ -16,6 +16,7 @@ from app.core.database import (
     ToolRunRecord,
     utc_now,
 )
+from app.core.text import detect_text_format
 from app.services.executor import Executor
 from app.services.mercado_publico import MercadoPublicoClient
 from app.services.minimax_client import MiniMaxClient, MiniMaxError
@@ -526,6 +527,7 @@ def _message_out(
         conversation_id=row.conversation_id,
         role=row.role,
         content=row.content,
+        content_format=detect_text_format(row.content),
         status=row.status,
         created_at=row.created_at,
         updated_at=row.updated_at,

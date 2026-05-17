@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from app.core.text import detect_text_format
 from app.services.executor import Executor
 from app.services.mercado_publico import MercadoPublicoClient
 from app.services.minimax_client import MiniMaxClient, MiniMaxError
@@ -100,5 +101,6 @@ async def audit_query(
         plan=plan,
         results=results,
         synthesis=synthesis,
+        synthesis_format=detect_text_format(synthesis),
         total_records=total_records,
     )
