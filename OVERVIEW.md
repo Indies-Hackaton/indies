@@ -144,6 +144,27 @@ Rendering marker:
 - The backend computes this marker from the generated/stored text; it does not
   mutate `content`.
 
+Response policy:
+- Assistant messages are limited to Chilean public-transparency and
+  anti-corruption analysis.
+- If a user asks for programming code/scripts, the backend must not return code;
+  it should answer the transparency-data portion and briefly state that code or
+  scripts cannot be provided.
+- If a user asks for the base prompt, system/developer messages, hidden rules,
+  or internal configuration, the backend must not reveal them; it should answer
+  the transparency-data portion and briefly state that internal instructions
+  cannot be disclosed.
+- When the chat model emits blocked content anyway, the backend replaces the
+  answer with a grounded fallback based on executed `TaskResult` rows. In the
+  stored `chat_response` invocation trace, `response_json.sanitized` is `true`,
+  `response_json.policy_violations` lists the triggered policy checks, and
+  `response_json.content` is redacted as
+  `"[redacted: blocked by chat response policy]"`.
+- Conversation-detail responses redact `system` message contents inside
+  `llm_invocations[].request_json.messages` as
+  `"[redacted: internal system prompt]"`; the database still stores the full
+  trace for server-side debugging.
+
 Feedback fields:
 - `ConversationOut.feedback_rating` and `MessageOut.feedback_rating` are
   `"like"`, `"dislike"`, or `null`.
@@ -300,7 +321,7 @@ revision adds persisted message and conversation feedback fields.
 |---|---|
 | `conversations` | UUID conversation shell with generated/renamable title, timestamps, nullable `deleted_at` for soft delete, overall `feedback_rating`, optional `feedback_text`, and `feedback_updated_at` |
 | `messages` | User/assistant messages with status (`processing`, `completed`, `failed`), per-message `feedback_rating`, and `feedback_updated_at` |
-| `llm_invocations` | Title generation, Planner, and chat-response model calls; stores request/response JSON and error status |
+| `llm_invocations` | Title generation, Planner, and chat-response model calls; stores request/response JSON and error status. Public API responses redact internal `system` prompt contents from `request_json.messages`. |
 | `tool_runs` | One row per Planner task/API execution, linked to the assistant message and planner invocation |
 
 There is no auth yet; the conversation UUID is the access handle.
@@ -322,7 +343,8 @@ operations, but their messages and trace rows remain in the database.
 - Runs the existing `Executor` and stores every tool/API result as a `tool_run`.
 - Calls the chat model to produce the final natural-language answer. The
   assistant response is expected to describe already executed results, not to
-  emit `[TOOL_CALL]` blocks or future API-call instructions.
+  emit `[TOOL_CALL]` blocks, future API-call instructions, programming code, or
+  internal prompts/instructions.
 
 #### `MiniMaxClient` (`backend/app/services/minimax_client.py`)
 - `MINIMAX_MODEL`: structured Planner/API-routing and legacy synthesis.
@@ -337,6 +359,10 @@ operations, but their messages and trace rows remain in the database.
   inability/error response body, or an overlong non-title.
 - Sanitizes chat responses that contain pseudo tool-call syntax and replaces
   them with a grounded fallback based on the executed `TaskResult` objects.
+- Sanitizes chat/synthesis responses that try to satisfy code-generation
+  requests or disclose internal prompts/instructions. Mixed requests are
+  handled by answering the transparency-data portion and refusing only the
+  forbidden portion.
 
 #### `Executor` (`backend/app/services/executor.py`)
 Runs Planner tasks concurrently. Supported tools:

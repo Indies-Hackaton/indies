@@ -626,7 +626,7 @@ def _llm_invocation_out(row: LlmInvocationRecord) -> LlmInvocationOut:
         assistant_message_id=row.assistant_message_id,
         purpose=row.purpose,
         model=row.model,
-        request_json=row.request_json,
+        request_json=_redact_llm_request_for_client(row.request_json),
         response_json=row.response_json,
         status=row.status,
         error=row.error,
@@ -679,6 +679,31 @@ def _fallback_answer(
 
 def _json_safe(value: Any) -> Any:
     return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _redact_llm_request_for_client(value: dict[str, Any]) -> dict[str, Any]:
+    """Hide internal system prompts from public conversation-detail traces."""
+    request_json = _json_safe(value)
+    messages = request_json.get("messages")
+    if not isinstance(messages, list):
+        return request_json
+
+    redacted_messages = []
+    for message in messages:
+        if not isinstance(message, dict):
+            redacted_messages.append(message)
+            continue
+        if message.get("role") != "system":
+            redacted_messages.append(message)
+            continue
+        redacted_messages.append(
+            {
+                **message,
+                "content": "[redacted: internal system prompt]",
+            }
+        )
+    request_json["messages"] = redacted_messages
+    return request_json
 
 
 def _new_id() -> str:
