@@ -395,6 +395,18 @@ Rules:
   assert wrongdoing from procurement listings alone. Identify records worth
   reviewing, explain the observable signals, and state the limitation.
 - Keep the answer concise: 3-8 sentences unless the user asks for detail.
+
+Citation rules:
+- Each result in the data has a "citation_index" field (1, 2, 3...).
+- When you mention a specific finding backed by data from a result, add [N] \
+immediately after the claim, where N is that result's citation_index.
+- Example: "Se encontraron 70 órdenes de compra [1] en el período analizado."
+- If a claim draws from multiple results, use multiple markers: [1][2].
+- If a result returned 0 records and you mention it, still cite it: \
+"No se encontraron licitaciones [2] en ese período."
+- Only add markers to claims directly backed by a specific result. \
+Do not add [N] to general observations or conclusions.
+- The markers must appear exactly as [N] — square brackets, number, nothing else.
 """
 
 
@@ -536,7 +548,10 @@ class MiniMaxClient:
     ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Generate the final user-facing answer with request/response trace."""
         plan_text = plan.model_dump()
-        results_text = [result.model_dump() for result in results]
+        results_text = [
+            {"citation_index": i + 1, **result.model_dump()}
+            for i, result in enumerate(results)
+        ]
         messages = [
             {"role": "system", "content": _CHAT_RESPONSE_PROMPT},
             {
