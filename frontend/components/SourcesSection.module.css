@@ -74,6 +74,16 @@
   opacity: 0.55;
 }
 
+.rowActive {
+  animation: highlight 1.8s ease-out forwards;
+}
+
+@keyframes highlight {
+  0%   { background: #fff3f3; }
+  60%  { background: #fff3f3; }
+  100% { background: transparent; }
+}
+
 .rowHeader {
   width: 100%;
   display: flex;

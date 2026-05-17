@@ -134,6 +134,28 @@
   line-height: 1.5;
 }
 
+/* Citation markers [N] rendered as inline buttons */
+.marker {
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  font-weight: 700;
+  color: var(--red);
+  background: none;
+  border: 1px solid var(--red);
+  border-radius: 2px;
+  padding: 0 3px;
+  cursor: pointer;
+  vertical-align: super;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s;
+  margin: 0 1px;
+}
+
+.marker:hover {
+  background: var(--red);
+  color: var(--white);
+}
+
 /* ── Sources row ─────────────────────────────────────────────────── */
 /* Indented to align with the assistant bubble (label width + gap) */
 .sourcesRow {

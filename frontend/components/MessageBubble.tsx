@@ -1,11 +1,72 @@
-import ReactMarkdown from "react-markdown";
+"use client";
+
+import { useState, type ReactNode } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import type { ChatTurn } from "@/lib/types";
 import { SourcesSection } from "./SourcesSection";
 import styles from "./MessageBubble.module.css";
 
-interface MessageBubbleProps {
-  turn: ChatTurn;
+// ── Citation marker parser ────────────────────────────────────────
+
+const MARKER_RE = /(\[\d+\])/g;
+
+function parseMarkers(text: string, onMarkerClick: (n: number) => void): ReactNode[] {
+  return text.split(MARKER_RE).map((part, i) => {
+    const match = part.match(/^\[(\d+)\]$/);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      return (
+        <button
+          key={i}
+          className={styles.marker}
+          type="button"
+          onClick={() => onMarkerClick(n)}
+          aria-label={`Ver fuente ${n}`}
+        >
+          {part}
+        </button>
+      );
+    }
+    return part;
+  });
 }
+
+// Applies marker parsing to a ReactMarkdown paragraph's string children.
+function makeParagraphComponent(onMarkerClick: (n: number) => void): Components["p"] {
+  return function Paragraph({ children }) {
+    const processed = typeof children === "string"
+      ? parseMarkers(children, onMarkerClick)
+      : children;
+    return <p>{processed}</p>;
+  };
+}
+
+// ── Content renderer ──────────────────────────────────────────────
+
+function renderContent(
+  content: string,
+  format: string,
+  onMarkerClick: (n: number) => void,
+) {
+  if (format === "markdown") {
+    return (
+      <div className={styles.markdown}>
+        <ReactMarkdown
+          components={{ p: makeParagraphComponent(onMarkerClick) }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+  return (
+    <p className={styles.assistantText}>
+      {parseMarkers(content, onMarkerClick)}
+    </p>
+  );
+}
+
+// ── Typing indicator ──────────────────────────────────────────────
 
 function TypingIndicator() {
   return (
@@ -17,22 +78,20 @@ function TypingIndicator() {
   );
 }
 
-// TODO: when the backend delivers [N] citation markers in the synthesis text,
-// replace this with a parser that wraps each [N] in a <button> that scrolls
-// to and highlights source-{messageId}-{N} in the SourcesSection below.
-function renderContent(content: string, format: string) {
-  if (format === "markdown") {
-    return (
-      <div className={styles.markdown}>
-        <ReactMarkdown>{content}</ReactMarkdown>
-      </div>
-    );
-  }
-  return <p className={styles.assistantText}>{content}</p>;
+// ── Component ─────────────────────────────────────────────────────
+
+interface MessageBubbleProps {
+  turn: ChatTurn;
 }
 
 export function MessageBubble({ turn }: MessageBubbleProps) {
   const { question, assistantMessage, status, error } = turn;
+  const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
+
+  function handleMarkerClick(n: number) {
+    // Toggle off if clicking the same marker twice.
+    setActiveSourceIndex((prev) => (prev === n ? null : n));
+  }
 
   return (
     <div className={styles.turn}>
@@ -60,6 +119,7 @@ export function MessageBubble({ turn }: MessageBubbleProps) {
           {status === "success" && assistantMessage && renderContent(
             assistantMessage.content,
             assistantMessage.content_format,
+            handleMarkerClick,
           )}
         </div>
       </div>
@@ -71,6 +131,7 @@ export function MessageBubble({ turn }: MessageBubbleProps) {
             toolRuns={turn.toolRuns}
             totalRecords={turn.totalRecords}
             messageId={turn.id}
+            activeIndex={activeSourceIndex}
           />
         </div>
       )}

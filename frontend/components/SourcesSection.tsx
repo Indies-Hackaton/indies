@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ToolRunOut } from "@/lib/types";
 import { DataRenderer } from "./DataRenderer";
 import styles from "./SourcesSection.module.css";
@@ -11,6 +11,7 @@ interface SourceRowProps {
   run: ToolRunOut;
   index: number;
   id: string;
+  isActive: boolean;
 }
 
 function buildApiCall(run: ToolRunOut): string {
@@ -20,14 +21,28 @@ function buildApiCall(run: ToolRunOut): string {
   return params ? `${run.tool}\n${params}` : run.tool;
 }
 
-function SourceRow({ run, index, id }: SourceRowProps) {
+function SourceRow({ run, index, id, isActive }: SourceRowProps) {
   const isEmpty = run.record_count === 0;
   const [open, setOpen] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  // Auto-expand and scroll when activated by a citation marker click.
+  useEffect(() => {
+    if (!isActive) return;
+    setOpen(true);
+    rowRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [isActive]);
 
   return (
     <div
+      ref={rowRef}
       id={id}
-      className={`${styles.row} ${isEmpty ? styles.rowEmpty : ""} ${open ? styles.rowOpen : ""}`}
+      className={[
+        styles.row,
+        isEmpty ? styles.rowEmpty : "",
+        open ? styles.rowOpen : "",
+        isActive ? styles.rowActive : "",
+      ].filter(Boolean).join(" ")}
     >
       <button
         className={styles.rowHeader}
@@ -73,10 +88,21 @@ interface SourcesSectionProps {
   toolRuns: ToolRunOut[];
   totalRecords: number;
   messageId: string;
+  activeIndex: number | null;
 }
 
-export function SourcesSection({ toolRuns, totalRecords, messageId }: SourcesSectionProps) {
+export function SourcesSection({
+  toolRuns,
+  totalRecords,
+  messageId,
+  activeIndex,
+}: SourcesSectionProps) {
   const [open, setOpen] = useState(true);
+
+  // Force section open when a citation marker activates a row.
+  useEffect(() => {
+    if (activeIndex !== null) setOpen(true);
+  }, [activeIndex]);
 
   if (toolRuns.length === 0) return null;
 
@@ -84,7 +110,6 @@ export function SourcesSection({ toolRuns, totalRecords, messageId }: SourcesSec
 
   return (
     <div className={styles.section}>
-      {/* ── Collapsible header ── */}
       <button
         className={styles.header}
         type="button"
@@ -104,7 +129,6 @@ export function SourcesSection({ toolRuns, totalRecords, messageId }: SourcesSec
         </span>
       </button>
 
-      {/* ── Source rows ── */}
       {open && (
         <div className={styles.body}>
           {toolRuns.map((run, i) => (
@@ -113,6 +137,7 @@ export function SourcesSection({ toolRuns, totalRecords, messageId }: SourcesSec
               run={run}
               index={i + 1}
               id={`source-${messageId}-${i + 1}`}
+              isActive={activeIndex === i + 1}
             />
           ))}
         </div>
