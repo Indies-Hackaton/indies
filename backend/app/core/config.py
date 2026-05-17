@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     # --- Persistence -------------------------------------------------------
     # SQLite is the default local store for conversations/messages/tool traces.
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/indies.db"
+    # PostgreSQL (Neon) connection string used by ContraloriaService.
+    CONTRALORIA_DATABASE_URL: str
 
 
     @property
