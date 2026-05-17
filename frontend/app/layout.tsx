@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TransparencIA — Datos públicos de Chile",
+  title: "VigIA — Datos públicos de Chile",
   description:
     "Mercado Público, Contraloría y Congreso en Chile. Pregunta en lenguaje natural.",
 };

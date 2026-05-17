@@ -26,7 +26,7 @@ function TextName({
     <span
       className={[styles.name, styles[size], className].filter(Boolean).join(" ")}
     >
-      <span className={styles.word}>Transparenc</span>
+      <span className={styles.word}>Vig</span>
       <span className={styles.ia}>IA</span>
     </span>
   );
@@ -64,7 +64,7 @@ export function BrandLogo({
 
   if (mode === "text" || (imgFailed && mode !== "icon")) {
     return (
-      <span className={rootClass} aria-label="TransparencIA">
+      <span className={rootClass} aria-label="VigIA">
         <TextName size={size} />
       </span>
     );
@@ -72,7 +72,7 @@ export function BrandLogo({
 
   if (mode === "icon") {
     return (
-      <span className={rootClass} aria-label="TransparencIA">
+      <span className={rootClass} aria-label="VigIA">
         {!imgFailed ? (
           <BrandMark size={size} onError={() => setImgFailed(true)} />
         ) : (
@@ -83,7 +83,7 @@ export function BrandLogo({
   }
 
   return (
-    <span className={rootClass} aria-label="TransparencIA">
+    <span className={rootClass} aria-label="VigIA">
       {!imgFailed && (
         <BrandMark size={size} onError={() => setImgFailed(true)} />
       )}
