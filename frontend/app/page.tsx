@@ -1,26 +1,36 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useQueryHistory } from "@/hooks/useQueryHistory";
-import { SearchBar } from "@/components/SearchBar";
-import { ExampleChips } from "@/components/ExampleChips";
-import { ReceiptCard } from "@/components/ReceiptCard";
+import { useState } from "react";
+import { useConversation } from "@/hooks/useConversation";
+import { useConversations } from "@/hooks/useConversations";
+import type { ChatTurn } from "@/lib/types";
+import { ChatArea } from "@/components/ChatArea";
+import { ReceiptPanel } from "@/components/ReceiptPanel";
+import { Sidebar } from "@/components/Sidebar";
 import styles from "./page.module.css";
 
 export default function Home() {
-  const { entries, submit, clear } = useQueryHistory();
-  const feedRef = useRef<HTMLDivElement>(null);
-  const isLoading = entries.some((e) => e.status === "loading");
+  const conversation = useConversation();
+  const conversations = useConversations();
+  const [panelTurn, setPanelTurn] = useState<ChatTurn | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Scroll feed to top whenever a new entry is added (newest card is at top).
-  useEffect(() => {
-    if (entries.length > 0) {
-      feedRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  }, [entries.length]);
+  async function handleSubmit(message: string) {
+    await conversation.sendMessage(message);
+    conversations.refresh();
+  }
 
-  function handleSubmit(message: string) {
-    submit(message);
+  function handleSelectConversation(id: string) {
+    setPanelTurn(null);
+    conversation.loadConversation(id);
+    // On mobile, close sidebar after selecting a conversation.
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  }
+
+  function handleNewConversation() {
+    setPanelTurn(null);
+    conversation.reset();
+    if (window.innerWidth < 768) setSidebarOpen(false);
   }
 
   return (
@@ -28,8 +38,17 @@ export default function Home() {
 
       {/* ── Header ── */}
       <header className={styles.header}>
-        <div className={styles.headerInner}>
         <div className={styles.headerLeft}>
+          {/* Mobile hamburger — hidden on desktop */}
+          <button
+            className={styles.hamburger}
+            type="button"
+            onClick={() => setSidebarOpen((v) => !v)}
+            aria-label="Abrir menú"
+            aria-expanded={sidebarOpen}
+          >
+            ☰
+          </button>
           <span className={styles.logo}>
             IN<span className={styles.logoAccent}>D</span>IES
           </span>
@@ -45,38 +64,56 @@ export default function Home() {
               year: "numeric",
             })}
           </span>
-          {entries.length > 0 && (
-            <button
-              className={styles.clearBtn}
-              onClick={clear}
-              type="button"
-              disabled={isLoading}
-            >
-              Limpiar
-            </button>
-          )}
-        </div>
         </div>
       </header>
 
-      {/* ── Search zone ── */}
-      <div className={styles.searchZone}>
-        <SearchBar onSubmit={handleSubmit} disabled={isLoading} />
-      </div>
+      {/* ── Body ── */}
+      <div className={styles.body}>
 
-      {/* ── Feed ── */}
-      <main className={styles.feed} ref={feedRef}>
-        {entries.length === 0 ? (
-          <ExampleChips onSelect={handleSubmit} />
-        ) : (
-          <div className={styles.feedInner}>
-            {entries.map((entry, i) => (
-              <ReceiptCard key={entry.id} entry={entry} index={entries.length - i} />
-            ))}
+        {/* Mobile backdrop — closes sidebar when tapped */}
+        {sidebarOpen && (
+          <div
+            className={styles.backdrop}
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* Sidebar */}
+        <div className={`${styles.sidebarCol} ${sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed}`}>
+          <Sidebar
+            conversations={conversations.conversations}
+            activeId={conversation.conversationId}
+            isLoading={conversations.isLoading}
+            isOpen={sidebarOpen}
+            onToggle={() => setSidebarOpen((v) => !v)}
+            onSelect={handleSelectConversation}
+            onNew={handleNewConversation}
+          />
+        </div>
+
+        {/* Chat */}
+        <div className={styles.chatCol}>
+          <ChatArea
+            turns={conversation.turns}
+            isLoading={conversation.isLoading}
+            title={conversation.conversationTitle}
+            onSubmit={handleSubmit}
+            onOpenPanel={setPanelTurn}
+          />
+        </div>
+
+        {/* Receipt panel */}
+        {panelTurn && (
+          <div className={styles.panelCol}>
+            <ReceiptPanel
+              turn={panelTurn}
+              onClose={() => setPanelTurn(null)}
+            />
           </div>
         )}
-      </main>
 
+      </div>
     </div>
   );
 }

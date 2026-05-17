@@ -331,9 +331,11 @@ You generate short titles for audit conversations.
 
 Rules:
 - Use the same language as the user's first message.
-- Return plain text only.
+- Return plain text only — no markdown of any kind.
+- Do NOT use #, ##, *, **, _, __, `, or any other markdown syntax anywhere.
 - Maximum 8 words.
-- No quotes, markdown, or punctuation at the end.
+- No quotes or punctuation at the end.
+- Output the title and nothing else.
 """
 
 _CHAT_RESPONSE_PROMPT = """\
@@ -671,8 +673,18 @@ class MiniMaxClient:
 
     @staticmethod
     def _clean_title(content: str) -> str:
-        title = content.strip().strip("\"'`").strip()
+        title = content.strip()
+        # Strip leading markdown heading characters (# ## ### etc.)
+        title = re.sub(r"^#+\s*", "", title)
+        # Strip surrounding quotes and backticks
+        title = title.strip("\"'`").strip()
+        # Strip inline markdown: **bold**, *italic*, __bold__, _italic_, `code`
+        title = re.sub(r"\*{1,2}(.+?)\*{1,2}", r"\1", title)
+        title = re.sub(r"_{1,2}(.+?)_{1,2}", r"\1", title)
+        title = re.sub(r"`(.+?)`", r"\1", title)
+        # Normalize whitespace
         title = " ".join(title.split())
+        # Strip trailing punctuation
         if title.endswith((".", ":", ";", ",")):
             title = title[:-1].strip()
         return title[:120] or "Nueva conversación"

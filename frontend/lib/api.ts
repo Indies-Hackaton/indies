@@ -1,4 +1,8 @@
-import type { AuditResponse } from "./types";
+import type {
+  ChatMessageResponse,
+  ConversationDetailResponse,
+  ConversationListItem,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -10,18 +14,22 @@ export class ApiError extends Error {
   }
 }
 
-export async function submitQuery(message: string): Promise<AuditResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+function baseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+}
 
-  const res = await fetch(`${baseUrl}/api/v1/audit/query`, {
-    method: "POST",
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const res = await fetch(`${baseUrl()}${path}`, {
+    ...init,
     headers: {
       "Content-Type": "application/json",
       // Auth header goes here in Phase 3:
       // "Authorization": `Bearer ${token}`,
+      ...init.headers,
     },
-    body: JSON.stringify({ message }),
   });
 
   if (!res.ok) {
@@ -35,5 +43,32 @@ export async function submitQuery(message: string): Promise<AuditResponse> {
     throw new ApiError(detail, res.status);
   }
 
-  return res.json() as Promise<AuditResponse>;
+  return res.json() as Promise<T>;
+}
+
+// ── Chat endpoints ───────────────────────────────────────────────────────
+
+export function sendChatMessage(
+  message: string,
+  conversationId: string | null,
+): Promise<ChatMessageResponse> {
+  return request<ChatMessageResponse>("/api/v1/chat/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      message,
+      conversation_id: conversationId ?? undefined,
+    }),
+  });
+}
+
+export function listConversations(): Promise<ConversationListItem[]> {
+  return request<ConversationListItem[]>("/api/v1/chat/conversations");
+}
+
+export function getConversation(
+  conversationId: string,
+): Promise<ConversationDetailResponse> {
+  return request<ConversationDetailResponse>(
+    `/api/v1/chat/conversations/${conversationId}`,
+  );
 }

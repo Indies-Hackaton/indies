@@ -1,0 +1,228 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-left: var(--border);
+  background: var(--white);
+  overflow: hidden;
+}
+
+/* ── Panel header ────────────────────────────────────────────────── */
+.panelHeader {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: var(--border);
+  background: var(--black);
+}
+
+.panelHeaderLeft {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.panelTitle {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--white);
+  white-space: nowrap;
+}
+
+.panelMeta {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.04em;
+}
+
+.closeBtn {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+  transition: color 0.12s;
+}
+
+.closeBtn:hover {
+  color: var(--white);
+}
+
+/* ── Scrollable body ─────────────────────────────────────────────── */
+.panelBody {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* ── Sections ────────────────────────────────────────────────────── */
+.section {
+  padding: 16px 18px;
+  border-bottom: var(--border-thin);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.sectionLabel {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--red);
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--red);
+}
+
+/* ── Question ────────────────────────────────────────────────────── */
+.question {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--black);
+  margin: 0;
+}
+
+/* ── Plan ────────────────────────────────────────────────────────── */
+.reasoning {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.taskList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.taskItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: var(--border-thin);
+  background: var(--surface);
+}
+
+.taskDesc {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* ── Tool run blocks ─────────────────────────────────────────────── */
+.runList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.runBlock {
+  border: var(--border-thin);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px;
+  background: var(--white);
+}
+
+.runBlockError {
+  border-left: 2px solid var(--red);
+}
+
+.runHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.runDesc {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--muted);
+  flex: 1;
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.runCount {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--muted-light);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.runError {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--red);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.runEmpty {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--muted-light);
+  margin: 0;
+}
+
+/* ── Shared badge ────────────────────────────────────────────────── */
+.badge {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--black);
+  color: var(--white);
+  padding: 2px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Synthesis ───────────────────────────────────────────────────── */
+.synthesis {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--black);
+  margin: 0;
+  white-space: pre-wrap;
+}

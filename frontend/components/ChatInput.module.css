@@ -1,0 +1,84 @@
+.wrapper {
+  flex-shrink: 0;
+  padding: 16px 24px 20px;
+  border-top: var(--border);
+  background: var(--white);
+}
+
+.form {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.input {
+  flex: 1;
+  background: var(--white);
+  border: var(--border);
+  border-right: none;
+  color: var(--black);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 13px 16px;
+  outline: none;
+  transition: border-color 0.15s;
+  min-width: 0;
+}
+
+.input::placeholder {
+  color: var(--muted-light);
+  font-style: italic;
+}
+
+.input:focus {
+  border-color: var(--red);
+}
+
+.input:disabled {
+  background: var(--surface);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.button {
+  flex-shrink: 0;
+  background: var(--red);
+  border: var(--border);
+  border-color: var(--red);
+  color: var(--white);
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 900;
+  padding: 13px 22px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--red-dark);
+  border-color: var(--red-dark);
+}
+
+.button:disabled {
+  background: var(--muted-light);
+  border-color: var(--muted-light);
+  cursor: not-allowed;
+}
+
+.spinner {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: var(--white);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
