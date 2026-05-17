@@ -70,6 +70,7 @@ interface ConversationState {
   conversationId: string | null;
   conversationTitle: string | null;
   turns: ChatTurn[];
+  isLoadingConversation: boolean;
 }
 
 export function useConversation() {
@@ -77,9 +78,10 @@ export function useConversation() {
     conversationId: null,
     conversationTitle: null,
     turns: [],
+    isLoadingConversation: false,
   });
 
-  const { conversationId, conversationTitle, turns } = state;
+  const { conversationId, conversationTitle, turns, isLoadingConversation } = state;
   const isLoading = turns.some((t) => t.status === "loading");
 
   const sendMessage = useCallback(
@@ -111,6 +113,7 @@ export function useConversation() {
         setState((prev) => ({
           conversationId: response.conversation.id,
           conversationTitle: response.conversation.title,
+          isLoadingConversation: false,
           turns: prev.turns.map((t) =>
             t.id === tempId
               ? {
@@ -144,16 +147,18 @@ export function useConversation() {
 
   // Load a past conversation from the sidebar.
   const loadConversation = useCallback(async (id: string) => {
-    setState({ conversationId: id, conversationTitle: null, turns: [] });
+    // Show skeleton instead of empty state while fetching.
+    setState({ conversationId: id, conversationTitle: null, turns: [], isLoadingConversation: true });
     try {
       const detail = await getConversation(id);
       setState({
         conversationId: id,
         conversationTitle: detail.conversation.title,
         turns: reconstructTurns(detail),
+        isLoadingConversation: false,
       });
     } catch {
-      setState({ conversationId: null, conversationTitle: null, turns: [] });
+      setState({ conversationId: null, conversationTitle: null, turns: [], isLoadingConversation: false });
     }
   }, []);
 
@@ -185,8 +190,8 @@ export function useConversation() {
 
   // Start a fresh conversation.
   const reset = useCallback(() => {
-    setState({ conversationId: null, conversationTitle: null, turns: [] });
+    setState({ conversationId: null, conversationTitle: null, turns: [], isLoadingConversation: false });
   }, []);
 
-  return { conversationId, conversationTitle, turns, isLoading, sendMessage, loadConversation, updateTitle, updateTurnFeedback, reset };
+  return { conversationId, conversationTitle, turns, isLoading, isLoadingConversation, sendMessage, loadConversation, updateTitle, updateTurnFeedback, reset };
 }

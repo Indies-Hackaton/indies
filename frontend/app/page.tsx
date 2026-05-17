@@ -186,6 +186,7 @@ export default function Home() {
           <ChatArea
             turns={conversation.turns}
             isLoading={conversation.isLoading}
+            isLoadingConversation={conversation.isLoadingConversation}
             title={conversation.conversationTitle}
             onSubmit={handleSubmit}
             onRename={(newTitle) =>
