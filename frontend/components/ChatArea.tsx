@@ -39,6 +39,7 @@ function TrashIcon() {
 interface ChatAreaProps {
   turns: ChatTurn[];
   isLoading: boolean;
+  isLoadingConversation: boolean;
   title: string | null;
   onSubmit: (message: string) => void;
   onRename: (newTitle: string) => Promise<void>;
@@ -49,10 +50,13 @@ interface ChatAreaProps {
 // ── Component ─────────────────────────────────────────────────────
 
 export function ChatArea({
-  turns, isLoading, title, onSubmit, onRename, onDelete, onFeedback,
+  turns, isLoading, isLoadingConversation, title, onSubmit, onRename, onDelete, onFeedback,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Tracks whether the next scroll should be instant (conversation loaded)
+  // or smooth (new message sent during the session).
+  const scrollInstantRef = useRef(false);
 
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
@@ -60,8 +64,19 @@ export function ChatArea({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+  // When a conversation finishes loading, mark the next scroll as instant.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isLoadingConversation) {
+      scrollInstantRef.current = true;
+    }
+  }, [isLoadingConversation]);
+
+  // Scroll to bottom whenever turns change, picking the right behavior.
+  useEffect(() => {
+    if (turns.length === 0) return;
+    const behavior = scrollInstantRef.current ? "instant" : "smooth";
+    scrollInstantRef.current = false;
+    bottomRef.current?.scrollIntoView({ behavior });
   }, [turns.length]);
 
   // Focus the input when entering edit mode.
@@ -155,7 +170,13 @@ export function ChatArea({
 
       {/* ── Message thread ── */}
       <div className={styles.thread}>
-        {turns.length === 0 ? (
+        {isLoadingConversation ? (
+          <div className={styles.threadLoading}>
+            {[85, 60, 90, 50, 75].map((w, i) => (
+              <div key={i} className={styles.skeletonLine} style={{ width: `${w}%` }} />
+            ))}
+          </div>
+        ) : turns.length === 0 ? (
           <div className={styles.threadEmpty}>
             <ExampleChips onSelect={onSubmit} />
           </div>
@@ -163,7 +184,7 @@ export function ChatArea({
           <div className={styles.messages}>
             {turns.map((turn) => (
               <MessageBubble
-                key={turn.id}
+                key={turn.renderKey}
                 turn={turn}
                 onFeedback={onFeedback}
               />

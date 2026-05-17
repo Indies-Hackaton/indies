@@ -50,8 +50,10 @@ function reconstructTurns(detail: ConversationDetailResponse): ChatTurn[] {
         ? { invocation_id: plannerInv.id, plan: parsedPlan }
         : null;
 
+    const stableId = assistantMsg?.id ?? makeId();
     turns.push({
-      id: assistantMsg?.id ?? makeId(),
+      id: stableId,
+      renderKey: stableId, // history turns: id and renderKey are the same
       question: msg.content,
       userMessage: msg,
       assistantMessage: assistantMsg,
@@ -70,6 +72,7 @@ interface ConversationState {
   conversationId: string | null;
   conversationTitle: string | null;
   turns: ChatTurn[];
+  isLoadingConversation: boolean;
 }
 
 export function useConversation() {
@@ -77,9 +80,10 @@ export function useConversation() {
     conversationId: null,
     conversationTitle: null,
     turns: [],
+    isLoadingConversation: false,
   });
 
-  const { conversationId, conversationTitle, turns } = state;
+  const { conversationId, conversationTitle, turns, isLoadingConversation } = state;
   const isLoading = turns.some((t) => t.status === "loading");
 
   const sendMessage = useCallback(
@@ -93,6 +97,7 @@ export function useConversation() {
           ...prev.turns,
           {
             id: tempId,
+            renderKey: tempId, // stable — never changes, prevents remount
             question,
             userMessage: null,
             assistantMessage: null,
@@ -111,10 +116,12 @@ export function useConversation() {
         setState((prev) => ({
           conversationId: response.conversation.id,
           conversationTitle: response.conversation.title,
+          isLoadingConversation: false,
           turns: prev.turns.map((t) =>
             t.id === tempId
               ? {
                   id: response.assistant_message.id,
+                  renderKey: tempId, // preserve the stable key
                   question,
                   userMessage: response.user_message,
                   assistantMessage: response.assistant_message,
@@ -144,16 +151,18 @@ export function useConversation() {
 
   // Load a past conversation from the sidebar.
   const loadConversation = useCallback(async (id: string) => {
-    setState({ conversationId: id, conversationTitle: null, turns: [] });
+    // Show skeleton instead of empty state while fetching.
+    setState({ conversationId: id, conversationTitle: null, turns: [], isLoadingConversation: true });
     try {
       const detail = await getConversation(id);
       setState({
         conversationId: id,
         conversationTitle: detail.conversation.title,
         turns: reconstructTurns(detail),
+        isLoadingConversation: false,
       });
     } catch {
-      setState({ conversationId: null, conversationTitle: null, turns: [] });
+      setState({ conversationId: null, conversationTitle: null, turns: [], isLoadingConversation: false });
     }
   }, []);
 
@@ -185,8 +194,8 @@ export function useConversation() {
 
   // Start a fresh conversation.
   const reset = useCallback(() => {
-    setState({ conversationId: null, conversationTitle: null, turns: [] });
+    setState({ conversationId: null, conversationTitle: null, turns: [], isLoadingConversation: false });
   }, []);
 
-  return { conversationId, conversationTitle, turns, isLoading, sendMessage, loadConversation, updateTitle, updateTurnFeedback, reset };
+  return { conversationId, conversationTitle, turns, isLoading, isLoadingConversation, sendMessage, loadConversation, updateTitle, updateTurnFeedback, reset };
 }

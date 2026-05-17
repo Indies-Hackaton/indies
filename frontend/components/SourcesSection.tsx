@@ -96,6 +96,8 @@ interface SourcesSectionProps {
   messageId: string;
   activeIndex: number | null;
   activeTick: number;
+  /** Progressive reveal: only show the first N tool runs. Defaults to all. */
+  maxVisible?: number;
 }
 
 export function SourcesSection({
@@ -104,7 +106,11 @@ export function SourcesSection({
   messageId,
   activeIndex,
   activeTick,
+  maxVisible,
 }: SourcesSectionProps) {
+  const visibleRuns = maxVisible !== undefined
+    ? toolRuns.slice(0, maxVisible)
+    : toolRuns;
   const [open, setOpen] = useState(true);
 
   // Force section open when a citation marker activates a row.
@@ -139,7 +145,7 @@ export function SourcesSection({
 
       {open && (
         <div className={styles.body}>
-          {toolRuns.map((run, i) => (
+          {visibleRuns.map((run, i) => (
             <SourceRow
               key={run.id}
               run={run}

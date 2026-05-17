@@ -4,6 +4,8 @@ import React, {
   Children,
   cloneElement,
   isValidElement,
+  useEffect,
+  useRef,
   useState,
   type ElementType,
   type ReactElement,
@@ -250,9 +252,63 @@ export function MessageBubble({ turn, onFeedback }: MessageBubbleProps) {
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [activeTick, setActiveTick] = useState(0);
 
+  // ── Progressive reveal animation ───────────────────────────────
+  // If the turn was already "success" on mount (history load), skip animation.
+  const wasSuccessOnMount = useRef(status === "success");
+
+  const [revealedCount, setRevealedCount] = useState(() =>
+    wasSuccessOnMount.current ? turn.toolRuns.length : 0,
+  );
+  const [displayText, setDisplayText] = useState(() =>
+    wasSuccessOnMount.current ? (assistantMessage?.content ?? "") : "",
+  );
+  const [isTyping, setIsTyping] = useState(false);
+  const [animationDone, setAnimationDone] = useState(wasSuccessOnMount.current);
+
+  // Trigger animation when loading → success transition happens.
+  useEffect(() => {
+    if (wasSuccessOnMount.current || status !== "success" || !assistantMessage) return;
+
+    const content = assistantMessage.content;
+    const toolCount = turn.toolRuns.length;
+    let cancelled = false;
+
+    async function runAnimation() {
+      // Phase 1: reveal tool runs one by one with 150ms stagger.
+      for (let i = 1; i <= toolCount; i++) {
+        await new Promise<void>((r) => setTimeout(r, 150));
+        if (cancelled) return;
+        setRevealedCount(i);
+      }
+
+      // Brief pause before synthesis begins.
+      await new Promise<void>((r) => setTimeout(r, 200));
+      if (cancelled) return;
+
+      // Phase 2: word-chunk typewriter for synthesis text.
+      setIsTyping(true);
+      const words = content.split(" ");
+      let built = "";
+      for (const word of words) {
+        await new Promise<void>((r) => setTimeout(r, 35));
+        if (cancelled) return;
+        built += (built ? " " : "") + word;
+        setDisplayText(built);
+      }
+
+      if (!cancelled) {
+        setIsTyping(false);
+        setDisplayText(content); // guarantee complete text
+        setAnimationDone(true);
+      }
+    }
+
+    runAnimation();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
   function handleMarkerClick(n: number) {
-    // Always activate the clicked source (no toggle-off).
-    // Increment tick so repeated clicks on the same marker re-trigger scroll.
     setActiveSourceIndex(n);
     setActiveTick((t) => t + 1);
   }
@@ -281,14 +337,27 @@ export function MessageBubble({ turn, onFeedback }: MessageBubbleProps) {
               </p>
             )}
 
-            {status === "success" && assistantMessage && renderContent(
-              assistantMessage.content,
-              assistantMessage.content_format,
-              handleMarkerClick,
+            {status === "success" && assistantMessage && (
+              animationDone
+                // Animation complete — render full markdown with markers.
+                ? renderContent(
+                    assistantMessage.content,
+                    assistantMessage.content_format,
+                    handleMarkerClick,
+                  )
+                // Still animating — render plain text with cursor.
+                : (
+                  <p className={styles.assistantText}>
+                    {parseMarkers(displayText, handleMarkerClick)}
+                    {isTyping && (
+                      <span className={styles.cursor} aria-hidden="true" />
+                    )}
+                  </p>
+                )
             )}
           </div>
 
-          {status === "success" && assistantMessage && (
+          {status === "success" && assistantMessage && animationDone && (
             <FeedbackButtons
               messageId={assistantMessage.id}
               currentRating={assistantMessage.feedback_rating}
@@ -303,6 +372,7 @@ export function MessageBubble({ turn, onFeedback }: MessageBubbleProps) {
               messageId={turn.id}
               activeIndex={activeSourceIndex}
               activeTick={activeTick}
+              maxVisible={revealedCount}
             />
           )}
         </div>

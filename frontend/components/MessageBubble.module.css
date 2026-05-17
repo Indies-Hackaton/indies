@@ -320,6 +320,22 @@
   box-shadow: none;
 }
 
+/* ── Typewriter cursor ───────────────────────────────────────────── */
+.cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--fg);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 0.9s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
 /* ── Feedback buttons (2G: hover lift) ───────────────────────────── */
 .feedback {
   display: flex;
