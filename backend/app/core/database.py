@@ -1,4 +1,4 @@
-"""Async SQLite persistence for conversations and execution traces."""
+"""Async database persistence for conversations and execution traces."""
 
 from __future__ import annotations
 
@@ -115,8 +115,20 @@ class ToolRunRecord(Base):
 
 def make_engine(database_url: str) -> AsyncEngine:
     """Build the async SQLAlchemy engine for the configured database URL."""
-    _prepare_sqlite_path(database_url)
-    return create_async_engine(database_url, future=True)
+    url = make_url(database_url)
+
+    if url.drivername.startswith("sqlite"):
+        _prepare_sqlite_path(database_url)
+        return create_async_engine(
+            database_url,
+            future=True,
+        )
+
+    return create_async_engine(
+        database_url,
+        future=True,
+        pool_pre_ping=True,
+    )
 
 
 def make_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
