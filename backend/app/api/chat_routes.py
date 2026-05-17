@@ -2,8 +2,8 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.services.chat_service import ChatNotFoundError, ChatService
@@ -14,6 +14,7 @@ from app.services.models import (
     ChatMessageResponse,
     ConversationDetailResponse,
     ConversationListItem,
+    ConversationOut,
 )
 from app.services.senado_scraper import SenadoClient
 
@@ -32,6 +33,25 @@ class ChatMessageRequest(BaseModel):
         min_length=1,
         description="Natural-language user message.",
     )
+
+
+class ConversationUpdateRequest(BaseModel):
+    """Request body for updating conversation metadata."""
+
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=160,
+        description="New conversation title.",
+    )
+
+    @field_validator("title")
+    @classmethod
+    def title_must_have_text(cls, value: str) -> str:
+        title = value.strip()
+        if not title:
+            raise ValueError("Title must not be empty.")
+        return title
 
 
 def get_sessionmaker(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -147,3 +167,68 @@ async def get_conversation(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(exc),
             ) from exc
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=ConversationOut,
+    summary="Rename a conversation",
+)
+async def rename_conversation(
+    conversation_id: str,
+    payload: ConversationUpdateRequest,
+    sessionmaker: SessionFactory,
+    minimax: MiniMaxClient = Depends(get_minimax_client),
+    mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
+    senado: SenadoClient = Depends(get_senado_client),
+    contraloria: ContraloriaService = Depends(get_contraloria_service),
+) -> ConversationOut:
+    """Rename an active conversation."""
+    async with sessionmaker() as session:
+        service = ChatService(
+            session=session,
+            minimax=minimax,
+            mercado_publico=mercado_publico,
+            senado=senado,
+            contraloria=contraloria,
+        )
+        try:
+            return await service.rename_conversation(conversation_id, payload.title)
+        except ChatNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    summary="Soft-delete a conversation",
+)
+async def delete_conversation(
+    conversation_id: str,
+    sessionmaker: SessionFactory,
+    minimax: MiniMaxClient = Depends(get_minimax_client),
+    mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
+    senado: SenadoClient = Depends(get_senado_client),
+    contraloria: ContraloriaService = Depends(get_contraloria_service),
+) -> Response:
+    """Soft-delete an active conversation while preserving messages and traces."""
+    async with sessionmaker() as session:
+        service = ChatService(
+            session=session,
+            minimax=minimax,
+            mercado_publico=mercado_publico,
+            senado=senado,
+            contraloria=contraloria,
+        )
+        try:
+            await service.delete_conversation(conversation_id)
+        except ChatNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
