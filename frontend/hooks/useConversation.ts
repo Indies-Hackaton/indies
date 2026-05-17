@@ -50,8 +50,10 @@ function reconstructTurns(detail: ConversationDetailResponse): ChatTurn[] {
         ? { invocation_id: plannerInv.id, plan: parsedPlan }
         : null;
 
+    const stableId = assistantMsg?.id ?? makeId();
     turns.push({
-      id: assistantMsg?.id ?? makeId(),
+      id: stableId,
+      renderKey: stableId, // history turns: id and renderKey are the same
       question: msg.content,
       userMessage: msg,
       assistantMessage: assistantMsg,
@@ -95,6 +97,7 @@ export function useConversation() {
           ...prev.turns,
           {
             id: tempId,
+            renderKey: tempId, // stable — never changes, prevents remount
             question,
             userMessage: null,
             assistantMessage: null,
@@ -118,6 +121,7 @@ export function useConversation() {
             t.id === tempId
               ? {
                   id: response.assistant_message.id,
+                  renderKey: tempId, // preserve the stable key
                   question,
                   userMessage: response.user_message,
                   assistantMessage: response.assistant_message,

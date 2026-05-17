@@ -117,8 +117,12 @@ export interface ConversationDetailResponse {
 
 /** A fully resolved chat turn held in local state. */
 export interface ChatTurn {
-  /** Unique turn id — matches assistant_message.id once resolved. */
+  /** Real message ID — matches assistant_message.id once resolved. */
   id: string;
+  /** Stable render key — set to tempId on creation, never changes.
+   *  Used as the React key so MessageBubble doesn't remount when the
+   *  real ID arrives and the animation state is preserved. */
+  renderKey: string;
   userMessage: MessageOut | null;
   assistantMessage: MessageOut | null;
   planner: ChatPlannerOut | null;

@@ -184,7 +184,7 @@ export function ChatArea({
           <div className={styles.messages}>
             {turns.map((turn) => (
               <MessageBubble
-                key={turn.id}
+                key={turn.renderKey}
                 turn={turn}
                 onFeedback={onFeedback}
               />
