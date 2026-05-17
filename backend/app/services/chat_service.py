@@ -27,6 +27,7 @@ from app.services.models import (
     ConversationDetailResponse,
     ConversationListItem,
     ConversationOut,
+    FeedbackRating,
     LlmInvocationOut,
     MessageOut,
     Plan,
@@ -317,6 +318,38 @@ class ChatService:
         await self._session.commit()
         return _conversation_out(conversation)
 
+    async def update_conversation_feedback(
+        self,
+        conversation_id: str,
+        *,
+        feedback_rating: FeedbackRating | None,
+        feedback_text: str | None,
+        update_rating: bool,
+        update_text: bool,
+    ) -> ConversationOut:
+        """Set, update, or clear user feedback for an active conversation."""
+        conversation = await self._get_active_conversation(conversation_id)
+        if update_rating:
+            conversation.feedback_rating = feedback_rating
+        if update_text:
+            conversation.feedback_text = feedback_text
+        conversation.feedback_updated_at = utc_now()
+        await self._session.commit()
+        return _conversation_out(conversation)
+
+    async def update_message_feedback(
+        self,
+        message_id: str,
+        *,
+        feedback_rating: FeedbackRating | None,
+    ) -> MessageOut:
+        """Set or clear like/dislike feedback for a message in an active conversation."""
+        message = await self._get_active_message(message_id)
+        message.feedback_rating = feedback_rating
+        message.feedback_updated_at = utc_now()
+        await self._session.commit()
+        return _message_out(message)
+
     async def delete_conversation(self, conversation_id: str) -> None:
         """Soft-delete an active conversation while preserving its audit trail."""
         conversation = await self._get_active_conversation(conversation_id)
@@ -351,6 +384,20 @@ class ChatService:
         if not conversation:
             raise ChatNotFoundError(f"Conversation {conversation_id!r} not found.")
         return conversation
+
+    async def _get_active_message(self, message_id: str) -> MessageRecord:
+        message = await self._session.scalar(
+            select(MessageRecord)
+            .join(
+                ConversationRecord,
+                MessageRecord.conversation_id == ConversationRecord.id,
+            )
+            .where(MessageRecord.id == message_id)
+            .where(ConversationRecord.deleted_at.is_(None))
+        )
+        if not message:
+            raise ChatNotFoundError(f"Message {message_id!r} not found.")
+        return message
 
     async def _generate_and_store_title(
         self,
@@ -541,6 +588,9 @@ def _conversation_out(row: ConversationRecord) -> ConversationOut:
         created_at=row.created_at,
         updated_at=row.updated_at,
         deleted_at=row.deleted_at,
+        feedback_rating=row.feedback_rating,
+        feedback_text=row.feedback_text,
+        feedback_updated_at=row.feedback_updated_at,
     )
 
 
@@ -559,6 +609,8 @@ def _message_out(
         status=row.status,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        feedback_rating=row.feedback_rating,
+        feedback_updated_at=row.feedback_updated_at,
         linked_invocation_ids=linked_invocation_ids or [],
         linked_tool_run_ids=linked_tool_run_ids or [],
     )

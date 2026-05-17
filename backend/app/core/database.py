@@ -43,6 +43,11 @@ class ConversationRecord(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    feedback_rating: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    feedback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    feedback_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     messages: Mapped[list["MessageRecord"]] = relationship(
         back_populates="conversation",
@@ -66,6 +71,10 @@ class MessageRecord(Base):
     status: Mapped[str] = mapped_column(String(20), default="completed", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    feedback_rating: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    feedback_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     conversation: Mapped[ConversationRecord] = relationship(back_populates="messages")
 

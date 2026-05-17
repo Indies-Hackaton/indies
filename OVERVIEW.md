@@ -57,9 +57,11 @@
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/v1/chat/messages` | Create/continue a persistent conversation turn |
+| `PATCH` | `/api/v1/chat/messages/{message_id}/feedback` | Set or clear like/dislike feedback for one chat message |
 | `GET` | `/api/v1/chat/conversations` | List persisted conversations |
 | `GET` | `/api/v1/chat/conversations/{conversation_id}` | Get messages, LLM invocations, and tool runs for one conversation |
 | `PATCH` | `/api/v1/chat/conversations/{conversation_id}` | Rename a conversation |
+| `PATCH` | `/api/v1/chat/conversations/{conversation_id}/feedback` | Set or clear overall conversation rating and text feedback |
 | `DELETE` | `/api/v1/chat/conversations/{conversation_id}` | Soft-delete a conversation |
 | `POST` | `/api/v1/audit/query` | Stateless compatibility endpoint: plan → execute → synthesize |
 | `GET` | `/api/v1/senado/support-staff` | Direct Senate support-staff lookup |
@@ -84,7 +86,10 @@ Response:
     "title": "Sistemas computacionales en Algarrobo",
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
-    "deleted_at": null
+    "deleted_at": null,
+    "feedback_rating": null,
+    "feedback_text": null,
+    "feedback_updated_at": null
   },
   "user_message": {
     "id": "uuid",
@@ -95,6 +100,8 @@ Response:
     "status": "completed",
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
+    "feedback_rating": null,
+    "feedback_updated_at": null,
     "linked_invocation_ids": [],
     "linked_tool_run_ids": []
   },
@@ -107,6 +114,8 @@ Response:
     "status": "completed",
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
+    "feedback_rating": null,
+    "feedback_updated_at": null,
     "linked_invocation_ids": ["planner-uuid", "chat-uuid"],
     "linked_tool_run_ids": ["toolrun-uuid"]
   },
@@ -135,6 +144,34 @@ Rendering marker:
 - The backend computes this marker from the generated/stored text; it does not
   mutate `content`.
 
+Feedback fields:
+- `ConversationOut.feedback_rating` and `MessageOut.feedback_rating` are
+  `"like"`, `"dislike"`, or `null`.
+- `ConversationOut.feedback_text` stores optional free-form user feedback about
+  the full conversation.
+- `feedback_updated_at` is `null` until feedback is first saved.
+
+### `PATCH /api/v1/chat/messages/{message_id}/feedback`
+
+Sets or clears like/dislike feedback for any user or assistant message in an
+active conversation.
+
+Request:
+```json
+{
+  "feedback_rating": "like"
+}
+```
+
+Use `{"feedback_rating": null}` to clear the message rating.
+
+Response: `MessageOut` with refreshed `feedback_rating` and
+`feedback_updated_at`.
+
+Errors:
+- `404` when the message does not exist or belongs to a soft-deleted conversation.
+- `422` when `feedback_rating` is not `"like"`, `"dislike"`, or `null`.
+
 ### `GET /api/v1/chat/conversations`
 
 Returns active, non-deleted conversations ordered by `updated_at` descending.
@@ -147,6 +184,9 @@ Each item is a `ConversationListItem`:
   "created_at": "2026-05-16T00:00:00Z",
   "updated_at": "2026-05-16T00:00:00Z",
   "deleted_at": null,
+  "feedback_rating": null,
+  "feedback_text": null,
+  "feedback_updated_at": null,
   "last_message": null,
   "message_count": 0
 }
@@ -173,6 +213,29 @@ and `deleted_at: null`.
 Errors:
 - `404` when the conversation does not exist or has been soft-deleted.
 - `422` when `title` is empty or longer than 160 characters.
+
+### `PATCH /api/v1/chat/conversations/{conversation_id}/feedback`
+
+Sets, updates, or clears overall feedback for an active conversation. Fields are
+patched independently: omitted fields keep their previous value, while explicit
+`null` clears the stored value.
+
+Request:
+```json
+{
+  "feedback_rating": "dislike",
+  "feedback_text": "La respuesta fue demasiado general."
+}
+```
+
+Response: `ConversationOut` with refreshed `feedback_rating`, `feedback_text`,
+and `feedback_updated_at`.
+
+Errors:
+- `404` when the conversation does not exist or has been soft-deleted.
+- `422` when no feedback fields are provided, `feedback_rating` is not
+  `"like"`, `"dislike"`, or `null`, or `feedback_text` is longer than 4000
+  characters.
 
 ### `DELETE /api/v1/chat/conversations/{conversation_id}`
 
@@ -230,12 +293,13 @@ connection before chat routes serve traffic. On Postgres it wraps the upgrade in
 a transaction-scoped advisory lock so concurrent Vercel cold starts do not run
 the same migration at the same time. The first revision is idempotent so it can
 adopt existing SQLite/Postgres databases created before migrations; it creates
-missing chat tables, indexes, and `conversations.deleted_at`.
+missing chat tables, indexes, and `conversations.deleted_at`. The second
+revision adds persisted message and conversation feedback fields.
 
 | Table | Purpose |
 |---|---|
-| `conversations` | UUID conversation shell with generated/renamable title, timestamps, and nullable `deleted_at` for soft delete |
-| `messages` | User/assistant messages with status (`processing`, `completed`, `failed`) |
+| `conversations` | UUID conversation shell with generated/renamable title, timestamps, nullable `deleted_at` for soft delete, overall `feedback_rating`, optional `feedback_text`, and `feedback_updated_at` |
+| `messages` | User/assistant messages with status (`processing`, `completed`, `failed`), per-message `feedback_rating`, and `feedback_updated_at` |
 | `llm_invocations` | Title generation, Planner, and chat-response model calls; stores request/response JSON and error status |
 | `tool_runs` | One row per Planner task/API execution, linked to the assistant message and planner invocation |
 
@@ -249,6 +313,8 @@ operations, but their messages and trace rows remain in the database.
 - Creates/reuses conversations.
 - Lists and fetches only active conversations (`deleted_at IS NULL`).
 - Renames conversations by updating `title` and `updated_at`.
+- Stores or clears message-level like/dislike feedback.
+- Stores or clears conversation-level like/dislike feedback and optional text feedback.
 - Soft-deletes conversations by setting `deleted_at`; it does not delete messages or traces.
 - Generates a title from the first user message with `MINIMAX_CHAT_MODEL`; falls back to a short slice of the message if title generation fails.
 - Persists user/assistant messages.
@@ -341,7 +407,7 @@ Local CSV store for Contraloría General de la República audit data. Loaded onc
 
 - `NEXT_PUBLIC_API_URL` points to the backend, defaulting to `http://localhost:8000`.
 - The frontend uses `/api/v1/chat/messages` for persistent turns and `/api/v1/chat/conversations` for the sidebar/history flow.
-- `frontend/lib/types.ts` mirrors backend chat response types, including `ConversationOut.deleted_at`.
+- `frontend/lib/types.ts` mirrors the chat response types currently used by the UI. Backend feedback fields are available in API responses and can be integrated into the frontend when needed.
 - `frontend/lib/api.ts` exposes helpers for send, list, get, rename, and soft-delete conversation endpoints.
 
 ---

@@ -15,6 +15,8 @@ from app.services.models import (
     ConversationDetailResponse,
     ConversationListItem,
     ConversationOut,
+    FeedbackRating,
+    MessageOut,
 )
 from app.services.senado_scraper import SenadoClient
 
@@ -52,6 +54,39 @@ class ConversationUpdateRequest(BaseModel):
         if not title:
             raise ValueError("Title must not be empty.")
         return title
+
+
+class MessageFeedbackRequest(BaseModel):
+    """Request body for updating like/dislike feedback on one message."""
+
+    feedback_rating: FeedbackRating | None = Field(
+        ...,
+        description="Set to 'like' or 'dislike'; set null to clear the rating.",
+    )
+
+
+class ConversationFeedbackRequest(BaseModel):
+    """Request body for updating overall conversation feedback."""
+
+    feedback_rating: FeedbackRating | None = Field(
+        default=None,
+        description="Set to 'like' or 'dislike'; set null to clear the rating.",
+    )
+    feedback_text: str | None = Field(
+        default=None,
+        max_length=4000,
+        description="Optional free-form user feedback; set null to clear it.",
+    )
+
+    @field_validator("feedback_text", mode="before")
+    @classmethod
+    def feedback_text_must_have_text(cls, value: object) -> object:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+        feedback_text = value.strip()
+        return feedback_text or None
 
 
 def get_sessionmaker(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -106,6 +141,41 @@ async def send_chat_message(
             return await service.handle_message(
                 conversation_id=payload.conversation_id,
                 message=payload.message,
+            )
+        except ChatNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+
+
+@router.patch(
+    "/messages/{message_id}/feedback",
+    response_model=MessageOut,
+    summary="Set or clear like/dislike feedback for a chat message",
+)
+async def update_message_feedback(
+    message_id: str,
+    payload: MessageFeedbackRequest,
+    sessionmaker: SessionFactory,
+    minimax: MiniMaxClient = Depends(get_minimax_client),
+    mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
+    senado: SenadoClient = Depends(get_senado_client),
+    contraloria: ContraloriaService = Depends(get_contraloria_service),
+) -> MessageOut:
+    """Persist like/dislike feedback for any message in an active conversation."""
+    async with sessionmaker() as session:
+        service = ChatService(
+            session=session,
+            minimax=minimax,
+            mercado_publico=mercado_publico,
+            senado=senado,
+            contraloria=contraloria,
+        )
+        try:
+            return await service.update_message_feedback(
+                message_id,
+                feedback_rating=payload.feedback_rating,
             )
         except ChatNotFoundError as exc:
             raise HTTPException(
@@ -194,6 +264,51 @@ async def rename_conversation(
         )
         try:
             return await service.rename_conversation(conversation_id, payload.title)
+        except ChatNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+
+
+@router.patch(
+    "/conversations/{conversation_id}/feedback",
+    response_model=ConversationOut,
+    summary="Set or clear overall conversation feedback",
+)
+async def update_conversation_feedback(
+    conversation_id: str,
+    payload: ConversationFeedbackRequest,
+    sessionmaker: SessionFactory,
+    minimax: MiniMaxClient = Depends(get_minimax_client),
+    mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
+    senado: SenadoClient = Depends(get_senado_client),
+    contraloria: ContraloriaService = Depends(get_contraloria_service),
+) -> ConversationOut:
+    """Persist like/dislike and optional free-form feedback for a conversation."""
+    fields_set = payload.model_fields_set
+    if not fields_set:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one feedback field must be provided.",
+        )
+
+    async with sessionmaker() as session:
+        service = ChatService(
+            session=session,
+            minimax=minimax,
+            mercado_publico=mercado_publico,
+            senado=senado,
+            contraloria=contraloria,
+        )
+        try:
+            return await service.update_conversation_feedback(
+                conversation_id,
+                feedback_rating=payload.feedback_rating,
+                feedback_text=payload.feedback_text,
+                update_rating="feedback_rating" in fields_set,
+                update_text="feedback_text" in fields_set,
+            )
         except ChatNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

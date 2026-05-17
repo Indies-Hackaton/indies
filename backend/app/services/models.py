@@ -11,6 +11,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 TextFormat = Literal["plain_text", "markdown"]
+FeedbackRating = Literal["like", "dislike"]
 
 
 class Task(BaseModel):
@@ -69,6 +70,9 @@ class ConversationOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+    feedback_rating: FeedbackRating | None = None
+    feedback_text: str | None = None
+    feedback_updated_at: datetime | None = None
 
 
 class MessageOut(BaseModel):
@@ -88,6 +92,8 @@ class MessageOut(BaseModel):
     status: Literal["processing", "completed", "failed"]
     created_at: datetime
     updated_at: datetime
+    feedback_rating: FeedbackRating | None = None
+    feedback_updated_at: datetime | None = None
     linked_invocation_ids: list[str] = Field(default_factory=list)
     linked_tool_run_ids: list[str] = Field(default_factory=list)
 
