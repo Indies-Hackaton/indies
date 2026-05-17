@@ -4,6 +4,7 @@ This module wires together configuration, the shared async HTTP client, the
 service clients (MiniMax + Mercado Publico) and the API router.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -17,17 +18,33 @@ from app.api.routes import router as audit_router
 from app.api.senado_routes import router as senado_router
 from app.core.config import get_settings
 from app.core.database import init_db, make_engine, make_sessionmaker
-from app.services.camara import CamaraService
-from app.services.contraloria import ContraloriaService
+from app.services.camara import CamaraService, UnavailableCamaraService
+from app.services.contraloria import (
+    ContraloriaService,
+    UnavailableContraloriaService,
+)
 from app.services.mercado_publico import MercadoPublicoClient
 from app.services.minimax_client import MiniMaxClient
 from app.services.senado_scraper import SenadoClient
+
+logger = logging.getLogger(__name__)
 
 
 class HelloResponse(BaseModel):
     """Response model for the legacy connectivity-check endpoint."""
 
     message: str
+
+
+class RootResponse(BaseModel):
+    """Response model for the API index endpoint."""
+
+    name: str
+    version: str
+    status: str
+    docs_url: str
+    health_url: str
+    chat_messages_url: str
 
 
 @asynccontextmanager
@@ -51,10 +68,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.minimax_client = MiniMaxClient(settings, http_client)
     app.state.mercado_publico_client = MercadoPublicoClient(settings, http_client)
     app.state.senado_client = SenadoClient(http_client)
-    app.state.contraloria = await ContraloriaService.create(settings.DATABASE_URL)
-    app.state.camara = CamaraService(
-        pool=app.state.contraloria._pool,  # reuse the same Neon pool
-    )
+
+    contraloria_database_url = settings.resolved_contraloria_database_url
+    if contraloria_database_url:
+        app.state.contraloria = await ContraloriaService.create(contraloria_database_url)
+        app.state.camara = CamaraService(
+            pool=app.state.contraloria._pool,  # reuse the same Neon pool
+        )
+    else:
+        reason = (
+            "set CONTRALORIA_DATABASE_URL to a PostgreSQL/Neon DSN, or use a "
+            "PostgreSQL DATABASE_URL, to enable Contraloria and Camara tools"
+        )
+        logger.warning("Contraloria/Camara tools disabled: %s", reason)
+        app.state.contraloria = UnavailableContraloriaService(reason)
+        app.state.camara = UnavailableCamaraService(reason)
 
     try:
         yield
@@ -81,6 +109,19 @@ app.include_router(audit_router)
 app.include_router(chat_router)
 # Mount the Senate transparency scraper router (GET /api/v1/senado/support-staff).
 app.include_router(senado_router)
+
+
+@app.get("/", response_model=RootResponse)
+async def root() -> RootResponse:
+    """Human-friendly API index for the backend base URL."""
+    return RootResponse(
+        name=app.title,
+        version=app.version,
+        status="ok",
+        docs_url="/docs",
+        health_url="/health",
+        chat_messages_url="/api/v1/chat/messages",
+    )
 
 
 @app.get("/health")

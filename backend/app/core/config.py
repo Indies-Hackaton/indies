@@ -51,7 +51,10 @@ class Settings(BaseSettings):
     # --- Persistence -------------------------------------------------------
     # SQLite is the default local store for conversations/messages/tool traces.
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/indies.db"
-
+    # Optional PostgreSQL/Neon URL for Contraloria and Camara lookup tables.
+    # When omitted in local development, those executor tools are disabled
+    # instead of blocking the whole FastAPI app from starting.
+    CONTRALORIA_DATABASE_URL: str | None = None
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -66,6 +69,16 @@ class Settings(BaseSettings):
     def minimax_chat_model(self) -> str:
         """Return the chat model, falling back to the planner model."""
         return self.MINIMAX_CHAT_MODEL or self.MINIMAX_MODEL
+
+    @property
+    def resolved_contraloria_database_url(self) -> str | None:
+        """Return a PostgreSQL DSN for Contraloria/Camara, if configured."""
+        explicit_url = (self.CONTRALORIA_DATABASE_URL or "").strip()
+        if explicit_url:
+            return explicit_url if _is_postgres_url(explicit_url) else None
+
+        fallback_url = self.DATABASE_URL.strip()
+        return fallback_url if _is_postgres_url(fallback_url) else None
 
 
 @lru_cache
@@ -85,3 +98,10 @@ def _normalise_origin(origin: str) -> str:
     if parsed.scheme and parsed.netloc:
         return f"{parsed.scheme}://{parsed.netloc}"
     return cleaned.rstrip("/")
+
+
+def _is_postgres_url(database_url: str) -> bool:
+    """Return whether *database_url* points at a PostgreSQL-compatible DSN."""
+    return database_url.startswith(
+        ("postgresql://", "postgres://", "postgresql+asyncpg://")
+    )

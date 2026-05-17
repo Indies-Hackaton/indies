@@ -149,6 +149,23 @@ class CamaraService:
         return records, metadata
 
 
+class UnavailableCamaraService:
+    """Camara placeholder used when local dev has no Postgres lookup URL."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    async def resolve_diputado(self, name: str) -> list[dict[str, Any]]:
+        """Report that the backed deputy lookup table is not configured."""
+        raise CamaraError(f"Camara service unavailable: {self.reason}")
+
+    async def fetch_categoria(
+        self, codigo: int, categoria: str
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Report that the backed deputy lookup table is not configured."""
+        raise CamaraError(f"Camara service unavailable: {self.reason}")
+
+
 # ---------------------------------------------------------------------------
 # HTML parsing helpers
 # ---------------------------------------------------------------------------

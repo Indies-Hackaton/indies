@@ -16,6 +16,7 @@ data.
 """
 
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import asyncpg
 
@@ -48,6 +49,7 @@ class ContraloriaService:
     @classmethod
     async def create(cls, database_url: str) -> "ContraloriaService":
         """Open a connection pool and return a ready service instance."""
+        database_url = normalize_asyncpg_dsn(database_url)
         pool = await asyncpg.create_pool(
             database_url,
             min_size=1,
@@ -193,3 +195,46 @@ def _build_where(
             clauses.append(f"({' OR '.join(keyword_parts)})")
 
     return (" AND ".join(clauses), params)
+
+
+class UnavailableContraloriaService:
+    """Contraloria placeholder used when local dev has no Postgres data URL."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    async def close(self) -> None:
+        """Match the real service shutdown API."""
+        return None
+
+    async def search(self, **_: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Report that the backed data source is not configured."""
+        raise ContraloriaError(f"Contraloria service unavailable: {self.reason}")
+
+
+def normalize_asyncpg_dsn(database_url: str) -> str:
+    """Normalize PostgreSQL URLs before passing them directly to asyncpg."""
+    if database_url.startswith("postgresql+asyncpg://"):
+        database_url = database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+    if not database_url.startswith(("postgresql://", "postgres://")):
+        raise ContraloriaError(
+            "Contraloria requires a PostgreSQL DSN; set CONTRALORIA_DATABASE_URL "
+            "or use a PostgreSQL DATABASE_URL."
+        )
+
+    parts = urlsplit(database_url)
+    query_params = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query_params.pop("channel_binding", None)
+    query_params.pop("ssl", None)
+    query_params.pop("sslmode", None)
+
+    return urlunsplit(
+        (
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            urlencode(query_params),
+            parts.fragment,
+        )
+    )

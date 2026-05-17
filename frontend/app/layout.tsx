@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "VigIA — Datos públicos de Chile",
   description:
     "Mercado Público, Contraloría y Congreso en Chile. Pregunta en lenguaje natural.",
+  icons: {
+    icon: [{ url: "/favicon.png", type: "image/png", sizes: "512x512" }],
+    shortcut: "/favicon.png",
+    apple: "/favicon.png",
+  },
 };
 
 export default function RootLayout({

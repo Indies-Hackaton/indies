@@ -15,7 +15,7 @@
       |
       |-- SQLite/Postgres           → conversations, messages, LLM traces, tool runs
       |-- MiniMax Planner model      → structured API task plan
-      |-- Executor                   → Mercado Público + Senado API calls
+      |-- Executor                   → Mercado Público + Senado + Contraloría/Cámara tool calls
       |-- MiniMax Chat model         → natural-language response
       |
       v
@@ -35,7 +35,7 @@
 - Creates a shared `httpx.AsyncClient`.
 - Creates the async database engine and runs Alembic migrations to `head` at startup.
 - Mounts `MiniMaxClient`, `MercadoPublicoClient`, `SenadoClient`, `ContraloriaService`, and `db_sessionmaker` onto `app.state`.
-- Loads both Contraloría CSV files (~120 MB total) into memory at startup.
+- Uses `CONTRALORIA_DATABASE_URL` (or a PostgreSQL `DATABASE_URL`) for Contraloría/Cámara lookup tables; when no PostgreSQL DSN is configured, those executor tools are disabled so local development still starts.
 - Enables CORS for origins in `FRONTEND_ORIGINS`.
 
 ### Config
@@ -51,11 +51,13 @@
 | `MERCADO_PUBLICO_BASE_URL` | — | Required; example: `https://api.mercadopublico.cl/servicios/v1/publico` |
 | `FRONTEND_ORIGINS` | — | Required comma-separated CORS origins |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./data/indies.db` | Optional async SQLAlchemy URL for conversation persistence |
+| `CONTRALORIA_DATABASE_URL` | — | Optional PostgreSQL/Neon URL for Contraloría and Cámara lookup tables; falls back to `DATABASE_URL` only when `DATABASE_URL` is PostgreSQL |
 
 ### API Routes
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/` | API index with docs/health/chat route pointers |
 | `POST` | `/api/v1/chat/messages` | Create/continue a persistent conversation turn |
 | `PATCH` | `/api/v1/chat/messages/{message_id}/feedback` | Set or clear like/dislike feedback for one chat message |
 | `GET` | `/api/v1/chat/conversations` | List persisted conversations |
@@ -67,6 +69,21 @@
 | `GET` | `/api/v1/senado/support-staff` | Direct Senate support-staff lookup |
 | `GET` | `/health` | Liveness probe |
 | `GET` | `/api/hello` | Legacy connectivity check |
+
+### `GET /`
+
+Returns a small API index for the backend base URL:
+
+```json
+{
+  "name": "Indies Audit API",
+  "version": "0.2.0",
+  "status": "ok",
+  "docs_url": "/docs",
+  "health_url": "/health",
+  "chat_messages_url": "/api/v1/chat/messages"
+}
+```
 
 ### `POST /api/v1/chat/messages`
 
@@ -397,6 +414,8 @@ Runs Planner tasks concurrently. Supported tools:
 | `mp_resolve_organism` | `organism_name` |
 | `mp_semantic_range` | `organism_name`, `start_date`, `end_date`, `keywords`, optional `include_tenders`, `include_orders` |
 | `contraloria_search` | optional `entity_name`, `year_min`, `year_max`, `region`, `tipo_fiscalizacion`, `complejidad`, `keywords`, `source`, `limit` |
+| `camara_resolve_diputado` | `name` |
+| `camara_datos_diputado` | `categoria` plus `codigo` or `name` |
 
 `mp_semantic_range` normalizes accents and expands computational keywords with
 common Spanish singular/plural variants such as `sistemas informaticos` →
@@ -411,11 +430,16 @@ the name through Mercado Público before calling `ordenesdecompra.json` or
 date-only searches.
 
 #### `ContraloriaService` (`backend/app/services/contraloria.py`)
-Local CSV store for Contraloría General de la República audit data. Loaded once at startup.
+PostgreSQL client for Contraloría General de la República audit data. It is
+enabled when `CONTRALORIA_DATABASE_URL` is set to a PostgreSQL/Neon DSN, or
+when `DATABASE_URL` itself is PostgreSQL. If the app is using the default local
+SQLite persistence URL and no Contraloría DSN is configured, FastAPI still
+starts and `contraloria_search` tool runs return `status: "error"` with a
+service-unavailable message.
 
-**Data files** (located in `data/` at the repo root):
-- `Municipalidades_Contraloria.csv` — ~36 k rows, municipal audits 2020–2024
-- `No_Municipales_Contraloria.csv` — ~35 k rows, non-municipal entity audits 2020–2025
+**Database tables:**
+- `municipalidades` — municipal audits, 2020–2024
+- `no_municipalidades` — non-municipal entity audits, 2020–2025
 
 **`contraloria_search` parameters:**
 
@@ -432,13 +456,27 @@ Local CSV store for Contraloría General de la República audit data. Loaded onc
 
 **Response metadata:** `total_before_limit`, `returned`, `limit`, `source`, `filters_applied`.
 
-**Startup cost:** ~1–2 s to load ~120 MB; no per-query I/O.
+#### `CamaraService` (`backend/app/services/camara.py`)
+Scrapes public Cámara de Diputados transparency pages and uses the same
+PostgreSQL/Neon pool as Contraloría to resolve deputy names through the
+`id_diputados` table. When no PostgreSQL DSN is configured, FastAPI still
+starts and Cámara tool runs return `status: "error"` with a
+service-unavailable message.
+
+Supported `camara_datos_diputado.categoria` values:
+- `gastos_operacionales`
+- `asesoria_externa`
+- `pasajes_aereos`
+- `instancias_internacionales`
+- `personal_apoyo`
+- `audiencias`
 
 #### External services
 - Mercado Público API: authenticated with `ticket` query param.
 - Senado de Chile transparency API: unauthenticated Strapi REST endpoint.
 - MiniMax: OpenAI-compatible chat-completion endpoint.
-- Contraloría data: local CSV files (no external API call).
+- Contraloría/Cámara lookup data: PostgreSQL/Neon via `CONTRALORIA_DATABASE_URL`
+  or PostgreSQL `DATABASE_URL`; optional for local startup.
 
 ---
 
@@ -448,6 +486,7 @@ Local CSV store for Contraloría General de la República audit data. Loaded onc
 
 - `NEXT_PUBLIC_API_URL` points to the backend, defaulting to `http://localhost:8000`.
 - The frontend uses `POST /api/v1/chat/messages` and the conversation endpoints exclusively. The old `/api/v1/audit/query` endpoint is not used by the UI.
+- Browser tab/app icons are declared through Next metadata and served from `/favicon.png`.
 
 ### Layout
 
