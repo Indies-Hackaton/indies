@@ -13,7 +13,8 @@
       "Bash(curl *)",
       "Bash(python3 -c ' *)",
       "WebFetch(domain:www.camara.cl)",
-      "Bash(grep -oE '\\\\$\\\\.[a-z]+\\\\\\([^\\)]*\\\\\\)')"
+      "Bash(grep -oE '\\\\$\\\\.[a-z]+\\\\\\([^\\)]*\\\\\\)')",
+      "WebSearch"
     ]
   },
   "enabledPlugins": {

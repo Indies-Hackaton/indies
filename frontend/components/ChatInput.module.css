@@ -12,17 +12,18 @@
   margin: 0 auto;
   width: 100%;
   border: var(--border);
-  border-radius: var(--radius-xl);
+  /* 2B: angular — consistent neubrutalism, not pill-shaped */
+  border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-brutal);
-  background: var(--white);
+  background: var(--bg);
 }
 
 .input {
   flex: 1;
   background: transparent;
   border: none;
-  color: var(--black);
+  color: var(--fg);
   font-family: var(--font-body);
   font-size: 0.95rem;
   padding: 14px 18px;
@@ -31,7 +32,7 @@
 }
 
 .input::placeholder {
-  color: var(--muted-light);
+  color: var(--fg-subtle);
 }
 
 .input:focus {
@@ -40,7 +41,7 @@
 
 .input:disabled {
   background: var(--surface);
-  color: var(--muted);
+  color: var(--fg-muted);
   cursor: not-allowed;
 }
 
@@ -49,13 +50,13 @@
   background: var(--red);
   border: none;
   border-left: var(--border);
-  color: var(--white);
+  color: #ffffff;
   font-family: var(--font-display);
   font-size: 1.15rem;
   font-weight: 800;
   padding: 14px 22px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -67,7 +68,7 @@
 }
 
 .button:disabled {
-  background: var(--muted-light);
+  background: var(--fg-subtle);
   cursor: not-allowed;
 }
 
@@ -76,7 +77,7 @@
   width: 15px;
   height: 15px;
   border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: var(--white);
+  border-top-color: #ffffff;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -91,7 +92,7 @@
   }
 
   .form {
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     box-shadow: var(--shadow-brutal-sm);
   }
 }

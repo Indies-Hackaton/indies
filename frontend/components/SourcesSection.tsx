@@ -12,6 +12,7 @@ interface SourceRowProps {
   index: number;
   id: string;
   isActive: boolean;
+  activeTick: number;
 }
 
 function buildApiCall(run: ToolRunOut): string {
@@ -21,17 +22,22 @@ function buildApiCall(run: ToolRunOut): string {
   return params ? `${run.tool}\n${params}` : run.tool;
 }
 
-function SourceRow({ run, index, id, isActive }: SourceRowProps) {
+function SourceRow({ run, index, id, isActive, activeTick }: SourceRowProps) {
   const isEmpty = run.record_count === 0;
   const [open, setOpen] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
 
-  // Auto-expand and scroll when activated by a citation marker click.
+  // Re-run whenever isActive becomes true OR when the same marker is clicked
+  // again (activeTick increments). setTimeout gives React time to render the
+  // newly-opened section before scrollIntoView fires.
   useEffect(() => {
     if (!isActive) return;
     setOpen(true);
-    rowRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [isActive]);
+    const timer = setTimeout(() => {
+      rowRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [isActive, activeTick]);
 
   return (
     <div
@@ -89,6 +95,7 @@ interface SourcesSectionProps {
   totalRecords: number;
   messageId: string;
   activeIndex: number | null;
+  activeTick: number;
 }
 
 export function SourcesSection({
@@ -96,13 +103,14 @@ export function SourcesSection({
   totalRecords,
   messageId,
   activeIndex,
+  activeTick,
 }: SourcesSectionProps) {
   const [open, setOpen] = useState(true);
 
   // Force section open when a citation marker activates a row.
   useEffect(() => {
     if (activeIndex !== null) setOpen(true);
-  }, [activeIndex]);
+  }, [activeIndex, activeTick]);
 
   if (toolRuns.length === 0) return null;
 
@@ -138,6 +146,7 @@ export function SourcesSection({
               index={i + 1}
               id={`source-${messageId}-${i + 1}`}
               isActive={activeIndex === i + 1}
+              activeTick={activeTick}
             />
           ))}
         </div>

@@ -83,8 +83,8 @@
 }
 
 @keyframes highlight {
-  0%   { background: #fff3f3; }
-  60%  { background: #fff3f3; }
+  0%   { background: var(--surface-alt); }
+  60%  { background: var(--surface-alt); }
   100% { background: transparent; }
 }
 

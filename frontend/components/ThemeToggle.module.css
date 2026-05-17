@@ -1,0 +1,42 @@
+.toggle {
+  display: flex;
+  align-items: stretch;
+  border: var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-brutal-xs);
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--bg);
+  border: none;
+  border-right: var(--border);
+  color: var(--fg-subtle);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.btn:last-child {
+  border-right: none;
+}
+
+.btn:hover {
+  background: var(--surface-alt);
+  color: var(--fg);
+}
+
+.btnActive {
+  background: var(--black);
+  color: var(--white);
+}
+
+.btnActive:hover {
+  background: var(--black);
+  color: var(--white);
+}

@@ -3,16 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useConversation } from "@/hooks/useConversation";
 import { useConversations } from "@/hooks/useConversations";
+import { useTheme } from "@/hooks/useTheme";
 import { deleteConversation, renameConversation } from "@/lib/api";
 import { ChatArea } from "@/components/ChatArea";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Sidebar } from "@/components/Sidebar";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import styles from "./page.module.css";
 
 export default function Home() {
   const conversation = useConversation();
   const conversations = useConversations();
+  const { theme, setTheme } = useTheme();
   /** Ancho de la columna (rail 44px ↔ panel 260px en desktop). */
   const [sidebarWide, setSidebarWide] = useState(true);
   /** Lista y textos del panel; en desktop aparece solo cuando el ancho terminó de abrir. */
@@ -140,6 +143,7 @@ export default function Home() {
           Mercado Público, Contraloría y Congreso · Chile
         </p>
         <div className={styles.headerRight}>
+          <ThemeToggle theme={theme} onChange={setTheme} />
           <span className={styles.dateBadge}>
             {new Date().toLocaleDateString("es-CL", {
               day: "numeric",
