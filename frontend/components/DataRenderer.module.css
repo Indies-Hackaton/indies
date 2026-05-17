@@ -4,6 +4,8 @@
   gap: 10px;
   width: 100%;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .tableMeta {
@@ -36,9 +38,12 @@
   overflow: auto;
   max-height: clamp(280px, 52vh, 680px);
   border: var(--border);
+  border-radius: var(--radius-md);
+  background: var(--white);
   -webkit-overflow-scrolling: touch;
   width: 100%;
   max-width: 100%;
+  isolation: isolate;
 }
 
 .table {
@@ -49,6 +54,11 @@
   font-family: var(--font-mono);
   font-size: 0.8rem;
   table-layout: auto;
+}
+
+.table thead {
+  position: relative;
+  z-index: 2;
 }
 
 .table th {
@@ -77,8 +87,8 @@
   color: var(--black);
   border-bottom: var(--border-thin);
   border-right: var(--border-thin);
-  white-space: nowrap;
   vertical-align: top;
+  background: var(--white);
 }
 
 .table td:last-child {
@@ -120,17 +130,22 @@
   left: 0;
   z-index: 1;
   background: var(--white);
-  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.06);
+  box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.12);
   white-space: nowrap;
   font-weight: 600;
   min-width: 8.5rem;
   max-width: 14rem;
 }
 
+.cellSticky.cellWrap {
+  white-space: normal !important;
+  max-width: min(16rem, 38vw);
+}
+
 .table th.cellSticky {
-  z-index: 3;
+  z-index: 4;
   background: var(--black);
-  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.15);
+  box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.25);
 }
 
 .table tbody tr:nth-child(even) td.cellSticky {
@@ -212,9 +227,24 @@
   max-height: min(40vh, 320px);
 }
 
+.scrollSources {
+  max-height: min(360px, 50vh);
+  width: 100%;
+}
+
+.cellAmount {
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 767px) {
   .scroll {
     max-height: min(380px, 48vh);
+  }
+
+  .scrollSources {
+    max-height: min(320px, 45vh);
   }
 
   .table {
@@ -239,6 +269,10 @@
 @media (max-width: 480px) {
   .scroll {
     max-height: min(320px, 42vh);
+  }
+
+  .scrollSources {
+    max-height: min(360px, 48vh);
   }
 
   .tableMeta {

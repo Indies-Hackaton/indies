@@ -70,7 +70,7 @@ function SourceRow({ run, index, id, isActive }: SourceRowProps) {
             <>
               <pre className={styles.apiCall}>{buildApiCall(run)}</pre>
               {run.result.records.length > 0 ? (
-                <DataRenderer records={run.result.records} />
+                <DataRenderer records={run.result.records} variant="sources" />
               ) : (
                 <p className={styles.noData}>Esta consulta no retornó registros.</p>
               )}
