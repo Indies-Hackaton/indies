@@ -22,6 +22,11 @@ Tool catalogue (keep in sync with the Planner prompt):
 
   Senate:
     senado_support_staff        year, month_es, senator_name?, staff_name?
+
+  Contraloría:
+    contraloria_search          entity_name?, year_min?, year_max?, region?,
+                                tipo_fiscalizacion?, complejidad?, keywords,
+                                source (municipalidades|no_municipales|both), limit?
 """
 
 import asyncio
@@ -32,6 +37,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.core.text import normalize_text
+from app.services.contraloria import ContraloriaError, ContraloriaService
 from app.services.mercado_publico import MercadoPublicoClient, MercadoPublicoError
 from app.services.models import Plan, Task, TaskResult
 from app.services.senado_scraper import SenadoClient, SenadoScraperError
@@ -56,9 +62,11 @@ class Executor:
         self,
         mp: MercadoPublicoClient,
         senado: SenadoClient,
+        contraloria: ContraloriaService,
     ) -> None:
         self._mp = mp
         self._senado = senado
+        self._contraloria = contraloria
 
     # ------------------------------------------------------------------
     # Public
@@ -86,7 +94,7 @@ class Executor:
                 record_count=len(records),
                 metadata=metadata,
             )
-        except (ExecutorError, SenadoScraperError, MercadoPublicoError, ValueError) as exc:
+        except (ExecutorError, SenadoScraperError, MercadoPublicoError, ContraloriaError, ValueError) as exc:
             return TaskResult(
                 task_id=task.id,
                 tool=task.tool,
@@ -194,6 +202,21 @@ class Executor:
 
         if tool == "mp_semantic_range":
             return await self._run_semantic_range(p)
+
+        # ── Contraloría ──────────────────────────────────────────────────
+        if tool == "contraloria_search":
+            records, metadata = await self._contraloria.search(
+                entity_name=p.get("entity_name"),
+                year_min=int(p["year_min"]) if p.get("year_min") is not None else None,
+                year_max=int(p["year_max"]) if p.get("year_max") is not None else None,
+                region=p.get("region"),
+                tipo_fiscalizacion=p.get("tipo_fiscalizacion"),
+                complejidad=p.get("complejidad"),
+                keywords=p.get("keywords") or [],
+                source=p.get("source") or "both",
+                limit=int(p["limit"]) if p.get("limit") is not None else 50,
+            )
+            return records, metadata
 
         raise ExecutorError(f"Unknown tool: {tool!r}")
 

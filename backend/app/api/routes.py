@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from app.services.contraloria import ContraloriaService
 from app.core.text import detect_text_format
 from app.services.executor import Executor
 from app.services.mercado_publico import MercadoPublicoClient
@@ -47,6 +48,9 @@ def get_mercado_publico_client(request: Request) -> MercadoPublicoClient:
 def get_senado_client(request: Request) -> SenadoClient:
     return request.app.state.senado_client
 
+def get_contraloria_service(request: Request) -> ContraloriaService:
+    return request.app.state.contraloria
+
 
 # ---------------------------------------------------------------------------
 # Main endpoint
@@ -62,6 +66,7 @@ async def audit_query(
     minimax: MiniMaxClient = Depends(get_minimax_client),
     mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
     senado: SenadoClient = Depends(get_senado_client),
+    contraloria: ContraloriaService = Depends(get_contraloria_service),
 ) -> AuditResponse:
     """
     Three-step pipeline:
@@ -86,7 +91,7 @@ async def audit_query(
         )
 
     # ── Step 2: Execute ───────────────────────────────────────────────────────
-    executor = Executor(mp=mercado_publico, senado=senado)
+    executor = Executor(mp=mercado_publico, senado=senado, contraloria=contraloria)
     results = await executor.run(plan)
 
     # ── Step 3: Synthesize ────────────────────────────────────────────────────
