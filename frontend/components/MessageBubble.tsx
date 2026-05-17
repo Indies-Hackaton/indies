@@ -1,10 +1,11 @@
 "use client";
 
-import {
+import React, {
   Children,
   cloneElement,
   isValidElement,
   useState,
+  type ElementType,
   type ReactElement,
   type ReactNode,
   type TableHTMLAttributes,
@@ -45,33 +46,26 @@ function processChildren(
   children: ReactNode,
   onMarkerClick: (n: number) => void,
 ): ReactNode {
+  // Only process direct string/number children — never recurse into React
+  // elements. Each element has its own CitationWrapper that handles its own
+  // string children. Recursing causes double-processing and nested <button>s.
   return Children.map(children, (child) => {
-    if (typeof child === "string") {
-      return parseMarkers(child, onMarkerClick);
-    }
-    if (typeof child === "number") {
-      return parseMarkers(String(child), onMarkerClick);
-    }
-    if (isValidElement(child)) {
-      const el = child as ReactElement<{ children?: ReactNode }>;
-      if (el.props.children == null) return child;
-      return cloneElement(el, {
-        children: processChildren(el.props.children, onMarkerClick),
-      });
-    }
+    if (typeof child === "string") return parseMarkers(child, onMarkerClick);
+    if (typeof child === "number") return parseMarkers(String(child), onMarkerClick);
     return child;
   });
 }
 
 function withCitationMarkers(
-  Tag: keyof JSX.IntrinsicElements,
+  Tag: ElementType,
   onMarkerClick: (n: number) => void,
 ) {
   return function CitationWrapper({
     children,
     ...props
   }: React.HTMLAttributes<HTMLElement> & { children?: ReactNode }) {
-    return <Tag {...props}>{processChildren(children, onMarkerClick)}</Tag>;
+    const T = Tag as React.ElementType;
+    return <T {...props}>{processChildren(children, onMarkerClick)}</T>;
   };
 }
 
@@ -92,7 +86,7 @@ function MarkdownTable({
 }
 
 function markdownComponents(onMarkerClick: (n: number) => void): Components {
-  const wrap = (tag: keyof JSX.IntrinsicElements) =>
+  const wrap = (tag: ElementType) =>
     withCitationMarkers(tag, onMarkerClick);
 
   return {

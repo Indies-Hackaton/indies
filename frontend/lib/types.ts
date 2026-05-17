@@ -25,12 +25,17 @@ export interface TaskResult {
 
 // ── Chat / conversation models (mirrors backend/app/services/models.py) ──
 
+export type FeedbackRating = "like" | "dislike";
+
 export interface ConversationOut {
   id: string;
   title: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  feedback_rating: FeedbackRating | null;
+  feedback_text: string | null;
+  feedback_updated_at: string | null;
 }
 
 export interface ConversationRenameRequest {
@@ -48,6 +53,8 @@ export interface MessageOut {
   status: "processing" | "completed" | "failed";
   created_at: string;
   updated_at: string;
+  feedback_rating: FeedbackRating | null;
+  feedback_updated_at: string | null;
   linked_invocation_ids: string[];
   linked_tool_run_ids: string[];
 }
