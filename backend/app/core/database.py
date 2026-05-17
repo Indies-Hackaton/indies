@@ -1,4 +1,4 @@
-"""Async SQLite persistence for conversations and execution traces."""
+"""Async database persistence for conversations and execution traces."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 def utc_now() -> datetime:
@@ -113,10 +115,56 @@ class ToolRunRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
+def normalize_database_url(database_url: str) -> str:
+    """Normalize database URLs for SQLAlchemy async engines."""
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    elif database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+
+    if database_url.startswith("postgresql+asyncpg://"):
+        parts = urlsplit(database_url)
+
+        query_params = dict(parse_qsl(parts.query, keep_blank_values=True))
+
+        # Neon/Vercel/Postgres URLs sometimes include params that asyncpg
+        # does not accept as connect() keyword arguments.
+        query_params.pop("channel_binding", None)
+
+        # asyncpg expects ssl=require instead of sslmode=require
+        if query_params.get("sslmode") == "require":
+            query_params.pop("sslmode", None)
+            query_params["ssl"] = "require"
+
+        cleaned_query = urlencode(query_params)
+
+        database_url = urlunsplit(
+            (
+                parts.scheme,
+                parts.netloc,
+                parts.path,
+                cleaned_query,
+                parts.fragment,
+            )
+        )
+
+    return database_url
+
 def make_engine(database_url: str) -> AsyncEngine:
     """Build the async SQLAlchemy engine for the configured database URL."""
-    _prepare_sqlite_path(database_url)
-    return create_async_engine(database_url, future=True)
+    database_url = normalize_database_url(database_url)
+    url = make_url(database_url)
+
+    if url.drivername.startswith("sqlite"):
+        _prepare_sqlite_path(database_url)
+        return create_async_engine(database_url, future=True)
+
+    return create_async_engine(
+        database_url,
+        future=True,
+        pool_pre_ping=True,
+    )
 
 
 def make_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

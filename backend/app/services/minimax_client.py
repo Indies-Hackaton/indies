@@ -283,6 +283,18 @@ mp_semantic_range
   include_tenders: bool (default true)
   include_orders : bool (default false)
 
+--- Contraloría General de la República ---
+contraloria_search
+  entity_name        : str?  partial name of the institution (e.g. "ALGARROBO")
+  year_min           : int?  earliest publication year (e.g. 2021)
+  year_max           : int?  latest publication year  (e.g. 2023)
+  region             : str?  Chilean region name (partial, e.g. "VALPARAISO")
+  tipo_fiscalizacion : str?  audit type (AUDITORIA | INSPECCION_OBRA_PUBLICA | ...)
+  complejidad        : str?  COMPLEJA | MEDIANAMENTE COMPLEJA | LEVEMENTE COMPLEJA
+  keywords           : list  search terms across subject/objective/finding text
+  source             : str   "municipalidades" | "no_municipales" | "both" (default "both")
+  limit              : int   max rows to return (default 50, max 200)
+
 === RULES ===
 - Emit as many tasks as needed; run independent ones in parallel.
 - Use senado_support_staff for anything about senator staff, salaries, \
@@ -291,8 +303,13 @@ personal de apoyo.
 for a named institution over a date range. Product/service keywords are \
 optional; use keywords: [] for broad searches such as suspicious/doubtful \
 purchase or tender reviews.
+- Use contraloria_search when the user asks about Contraloría findings, \
+audits, observaciones, fiscalizaciones, or irregularidades involving any \
+public institution or municipality. Set source="municipalidades" for \
+municipality questions, "no_municipales" for other public entities, "both" \
+when unsure.
 - Use mp_semantic_range when the user gives an institution name, a date \
-range, and product/service keywords.
+range, and product/service keywords (Mercado Público procurement data).
 - Use mp_orders_by_org_and_date when the user asks for purchase orders for a \
 named public organism and a single date; pass the name as organism_name if no \
 numeric code is provided.
@@ -378,6 +395,18 @@ Rules:
   assert wrongdoing from procurement listings alone. Identify records worth
   reviewing, explain the observable signals, and state the limitation.
 - Keep the answer concise: 3-8 sentences unless the user asks for detail.
+
+Citation rules:
+- Each result in the data has a "citation_index" field (1, 2, 3...).
+- When you mention a specific finding backed by data from a result, add [N] \
+immediately after the claim, where N is that result's citation_index.
+- Example: "Se encontraron 70 órdenes de compra [1] en el período analizado."
+- If a claim draws from multiple results, use multiple markers: [1][2].
+- If a result returned 0 records and you mention it, still cite it: \
+"No se encontraron licitaciones [2] en ese período."
+- Only add markers to claims directly backed by a specific result. \
+Do not add [N] to general observations or conclusions.
+- The markers must appear exactly as [N] — square brackets, number, nothing else.
 """
 
 
@@ -519,7 +548,10 @@ class MiniMaxClient:
     ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Generate the final user-facing answer with request/response trace."""
         plan_text = plan.model_dump()
-        results_text = [result.model_dump() for result in results]
+        results_text = [
+            {"citation_index": i + 1, **result.model_dump()}
+            for i, result in enumerate(results)
+        ]
         messages = [
             {"role": "system", "content": _CHAT_RESPONSE_PROMPT},
             {

@@ -1,10 +1,10 @@
+import ReactMarkdown from "react-markdown";
 import type { ChatTurn } from "@/lib/types";
-import { ReceiptInline } from "./ReceiptInline";
+import { SourcesSection } from "./SourcesSection";
 import styles from "./MessageBubble.module.css";
 
 interface MessageBubbleProps {
   turn: ChatTurn;
-  onOpenPanel: (turn: ChatTurn) => void;
 }
 
 function TypingIndicator() {
@@ -17,7 +17,21 @@ function TypingIndicator() {
   );
 }
 
-export function MessageBubble({ turn, onOpenPanel }: MessageBubbleProps) {
+// TODO: when the backend delivers [N] citation markers in the synthesis text,
+// replace this with a parser that wraps each [N] in a <button> that scrolls
+// to and highlights source-{messageId}-{N} in the SourcesSection below.
+function renderContent(content: string, format: string) {
+  if (format === "markdown") {
+    return (
+      <div className={styles.markdown}>
+        <ReactMarkdown>{content}</ReactMarkdown>
+      </div>
+    );
+  }
+  return <p className={styles.assistantText}>{content}</p>;
+}
+
+export function MessageBubble({ turn }: MessageBubbleProps) {
   const { question, assistantMessage, status, error } = turn;
 
   return (
@@ -43,16 +57,21 @@ export function MessageBubble({ turn, onOpenPanel }: MessageBubbleProps) {
             </p>
           )}
 
-          {status === "success" && assistantMessage && (
-            <p className={styles.assistantText}>{assistantMessage.content}</p>
+          {status === "success" && assistantMessage && renderContent(
+            assistantMessage.content,
+            assistantMessage.content_format,
           )}
         </div>
       </div>
 
-      {/* ── Inline receipt strip (success only) ── */}
-      {status === "success" && (
-        <div className={styles.receiptRow}>
-          <ReceiptInline turn={turn} onOpenPanel={onOpenPanel} />
+      {/* ── Sources section ── */}
+      {status === "success" && turn.toolRuns.length > 0 && (
+        <div className={styles.sourcesRow}>
+          <SourcesSection
+            toolRuns={turn.toolRuns}
+            totalRecords={turn.totalRecords}
+            messageId={turn.id}
+          />
         </div>
       )}
 

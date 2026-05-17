@@ -16,6 +16,7 @@ from app.core.database import (
     ToolRunRecord,
     utc_now,
 )
+from app.services.contraloria import ContraloriaService
 from app.core.text import detect_text_format
 from app.services.executor import Executor
 from app.services.mercado_publico import MercadoPublicoClient
@@ -49,11 +50,13 @@ class ChatService:
         minimax: MiniMaxClient,
         mercado_publico: MercadoPublicoClient,
         senado: SenadoClient,
+        contraloria: ContraloriaService,
     ) -> None:
         self._session = session
         self._minimax = minimax
         self._mercado_publico = mercado_publico
         self._senado = senado
+        self._contraloria = contraloria
 
     async def handle_message(
         self,
@@ -152,7 +155,7 @@ class ChatService:
                 total_records=0,
             )
 
-        executor = Executor(mp=self._mercado_publico, senado=self._senado)
+        executor = Executor(mp=self._mercado_publico, senado=self._senado, contraloria=self._contraloria)
         results = await executor.run(plan)
         tool_runs = await self._store_tool_runs(
             conversation_id=conversation.id,

@@ -156,10 +156,15 @@ export function useConversation() {
     }
   }, []);
 
+  // Update the title in local state (called after a successful rename).
+  const updateTitle = useCallback((newTitle: string) => {
+    setState((prev) => ({ ...prev, conversationTitle: newTitle }));
+  }, []);
+
   // Start a fresh conversation.
   const reset = useCallback(() => {
     setState({ conversationId: null, conversationTitle: null, turns: [] });
   }, []);
 
-  return { conversationId, conversationTitle, turns, isLoading, sendMessage, loadConversation, reset };
+  return { conversationId, conversationTitle, turns, isLoading, sendMessage, loadConversation, updateTitle, reset };
 }

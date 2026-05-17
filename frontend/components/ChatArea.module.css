@@ -32,6 +32,62 @@
   min-width: 0;
 }
 
+/* Inline rename input — matches title text size exactly */
+.titleInput {
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--black);
+  border: none;
+  border-bottom: 2px solid var(--red);
+  background: transparent;
+  outline: none;
+  width: min(520px, 60%);
+  padding: 0 2px;
+}
+
+.titleInput:disabled {
+  opacity: 0.6;
+}
+
+/* Action buttons container */
+.titleActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.titleActionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--muted-light);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+
+.titleActionBtn:hover:not(:disabled) {
+  color: var(--black);
+  background: var(--surface);
+}
+
+.titleActionBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.titleActionBtnDanger:hover:not(:disabled) {
+  color: var(--red);
+  background: #fff1f1;
+}
+
 /* ── Thread ──────────────────────────────────────────────────────── */
 .thread {
   flex: 1;

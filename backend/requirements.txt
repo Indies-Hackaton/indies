@@ -8,3 +8,4 @@ beautifulsoup4
 pandas
 SQLAlchemy
 aiosqlite
+asyncpg

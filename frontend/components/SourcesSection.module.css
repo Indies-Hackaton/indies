@@ -1,0 +1,165 @@
+.section {
+  width: 100%;
+  border: var(--border-thin);
+  background: var(--surface);
+  margin-top: 6px;
+}
+
+/* ── Collapsible header ──────────────────────────────────────────── */
+.header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.header:hover {
+  background: var(--line);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--black);
+}
+
+.headerMeta {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted-light);
+  letter-spacing: 0.02em;
+}
+
+.chevron {
+  font-size: 0.7rem;
+  color: var(--red);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ── Body ────────────────────────────────────────────────────────── */
+.body {
+  border-top: var(--border-thin);
+}
+
+/* ── Source row ──────────────────────────────────────────────────── */
+.row {
+  border-bottom: var(--border-thin);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowOpen {
+  background: var(--white);
+}
+
+.rowEmpty {
+  opacity: 0.55;
+}
+
+.rowHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.rowHeader:hover {
+  background: var(--white);
+}
+
+.index {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--red);
+  flex-shrink: 0;
+  min-width: 24px;
+}
+
+.indexEmpty {
+  color: var(--muted-light);
+}
+
+.toolName {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--black);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.countEmpty {
+  color: var(--muted-light);
+}
+
+/* ── Row body ────────────────────────────────────────────────────── */
+.rowBody {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.apiCall {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: var(--surface);
+  border: var(--border-thin);
+  padding: 8px 10px;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.rowError {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--red);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.noData {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--muted-light);
+  margin: 0;
+}

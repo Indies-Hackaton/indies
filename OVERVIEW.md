@@ -34,7 +34,8 @@
 `backend/app/main.py`
 - Creates a shared `httpx.AsyncClient`.
 - Creates the async database engine and runs `CREATE TABLE IF NOT EXISTS` at startup.
-- Mounts `MiniMaxClient`, `MercadoPublicoClient`, `SenadoClient`, and `db_sessionmaker` onto `app.state`.
+- Mounts `MiniMaxClient`, `MercadoPublicoClient`, `SenadoClient`, `ContraloriaService`, and `db_sessionmaker` onto `app.state`.
+- Loads both Contraloría CSV files (~120 MB total) into memory at startup.
 - Enables CORS for origins in `FRONTEND_ORIGINS`.
 
 ### Config
@@ -218,6 +219,7 @@ Runs Planner tasks concurrently. Supported tools:
 | `mp_search_buyers` | — |
 | `mp_resolve_organism` | `organism_name` |
 | `mp_semantic_range` | `organism_name`, `start_date`, `end_date`, `keywords`, optional `include_tenders`, `include_orders` |
+| `contraloria_search` | optional `entity_name`, `year_min`, `year_max`, `region`, `tipo_fiscalizacion`, `complejidad`, `keywords`, `source`, `limit` |
 
 `mp_semantic_range` normalizes accents and expands computational keywords with
 common Spanish singular/plural variants such as `sistemas informaticos` →
@@ -231,10 +233,35 @@ the name through Mercado Público before calling `ordenesdecompra.json` or
 `licitaciones.json`. This prevents named-organism requests from widening into
 date-only searches.
 
+#### `ContraloriaService` (`backend/app/services/contraloria.py`)
+Local CSV store for Contraloría General de la República audit data. Loaded once at startup.
+
+**Data files** (located in `data/` at the repo root):
+- `Municipalidades_Contraloria.csv` — ~36 k rows, municipal audits 2020–2024
+- `No_Municipales_Contraloria.csv` — ~35 k rows, non-municipal entity audits 2020–2025
+
+**`contraloria_search` parameters:**
+
+| Param | Type | Notes |
+|---|---|---|
+| `entity_name` | `str?` | Substring match on `Entidad` (accent-insensitive) |
+| `year_min` / `year_max` | `int?` | Inclusive range on `Año informe publicado` |
+| `region` | `str?` | Substring match on `Región` |
+| `tipo_fiscalizacion` | `str?` | e.g. `AUDITORIA`, `INSPECCION_OBRA_PUBLICA` |
+| `complejidad` | `str?` | `COMPLEJA` / `MEDIANAMENTE COMPLEJA` / `LEVEMENTE COMPLEJA` |
+| `keywords` | `list[str]` | Searched across `Materia Fiscalizacion`, `Nombre Fiscalizacion`, `Objetivo Fiscalizacion`, `Titulo Observacion` |
+| `source` | `str` | `"municipalidades"` / `"no_municipales"` / `"both"` (default `"both"`) |
+| `limit` | `int` | Max rows returned (default 50, max 200) |
+
+**Response metadata:** `total_before_limit`, `returned`, `limit`, `source`, `filters_applied`.
+
+**Startup cost:** ~1–2 s to load ~120 MB; no per-query I/O.
+
 #### External services
 - Mercado Público API: authenticated with `ticket` query param.
 - Senado de Chile transparency API: unauthenticated Strapi REST endpoint.
 - MiniMax: OpenAI-compatible chat-completion endpoint.
+- Contraloría data: local CSV files (no external API call).
 
 ---
 
