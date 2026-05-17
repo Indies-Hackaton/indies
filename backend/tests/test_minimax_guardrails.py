@@ -88,6 +88,33 @@ Rules:
         self.assertIn("Ejecuté las consultas", cleaned)
         self.assertIn("encontré 2 registros", cleaned)
 
+    def test_known_english_reviewing_fragment_is_repaired(self) -> None:
+        answer = (
+            "Observación: el contrato parece parcial por días, y Worth reviewing."
+        )
+        cleaned = MiniMaxClient._clean_chat_answer(
+            answer,
+            _sample_results(),
+            user_message="analiza conductores de senadores en abril 2026",
+        )
+
+        self.assertNotIn("Worth reviewing", cleaned)
+        self.assertIn("amerita revisión", cleaned)
+        self.assertNotIn("Ejecuté las consultas", cleaned)
+
+    def test_english_answer_is_replaced_with_spanish_fallback(self) -> None:
+        answer = "I found 2 records for this case, but the data should be reviewed."
+        cleaned = MiniMaxClient._clean_chat_answer(
+            answer,
+            _sample_results(),
+            user_message="analiza asesores de los senadores en abril 2026",
+        )
+
+        self.assertNotIn("I found", cleaned)
+        self.assertNotIn("should be reviewed", cleaned)
+        self.assertIn("Ejecuté las consultas", cleaned)
+        self.assertIn("encontré 2 registros", cleaned)
+
     def test_chinese_title_needs_fallback(self) -> None:
         self.assertTrue(
             MiniMaxClient._title_needs_fallback(

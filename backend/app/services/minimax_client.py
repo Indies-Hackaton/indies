@@ -21,6 +21,64 @@ from app.core.text import detect_text_format
 _MAX_CHAT_RESULT_RECORDS_PER_RESULT = 80
 _MAX_CHAT_RESULT_RECORD_CHARS = 1500
 
+_KNOWN_NON_SPANISH_FRAGMENT_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    (r"\brecords worth reviewing\b", "registros que ameritan revisión"),
+    (r"\bworth reviewing\b", "amerita revisión"),
+    (r"\bobservable signals\b", "señales observables"),
+    (r"\bstate the limitation\b", "indica la limitación"),
+)
+
+_ENGLISH_LANGUAGE_LEAK_PHRASES = (
+    "worth reviewing",
+    "observable signals",
+    "state the limitation",
+    "records worth reviewing",
+    "this case",
+    "there are",
+    "there were",
+    "i found",
+    "i did not",
+    "no records found",
+    "task failed",
+)
+
+_ENGLISH_LANGUAGE_LEAK_WORDS = {
+    "answer",
+    "available",
+    "because",
+    "but",
+    "case",
+    "could",
+    "data",
+    "failed",
+    "failure",
+    "for",
+    "found",
+    "from",
+    "however",
+    "limitation",
+    "records",
+    "reviewed",
+    "reviewing",
+    "results",
+    "should",
+    "signals",
+    "source",
+    "sources",
+    "summary",
+    "task",
+    "tasks",
+    "that",
+    "the",
+    "there",
+    "these",
+    "this",
+    "those",
+    "were",
+    "with",
+    "would",
+}
+
 
 class MiniMaxError(RuntimeError):
     """Raised when MiniMax is unreachable or returns an unusable response."""
@@ -459,8 +517,8 @@ for writing/running code.
   purchases/tenders the user asked for, say that the data was not retrieved
   yet instead of pretending to make more calls.
 - For questions about suspicious, doubtful, or irregular purchases, do not
-  assert wrongdoing from procurement listings alone. Identify records worth
-  reviewing, explain the observable signals, and state the limitation.
+  assert wrongdoing from procurement listings alone. Identifica registros que
+  ameritan revisión, explica las señales observables y declara la limitación.
 - Keep the answer concise: 3-8 sentences unless the user asks for detail.
 
 Citation rules:
@@ -648,12 +706,13 @@ class MiniMaxClient:
             temperature=0.2,
         )
         raw_answer = content.strip()
+        candidate_answer = self._repair_known_non_spanish_fragments(raw_answer)
         violations = self._chat_answer_policy_violations(
-            raw_answer,
+            candidate_answer,
             user_message,
         )
         answer = self._clean_chat_answer(
-            raw_answer,
+            candidate_answer,
             results,
             user_message=user_message,
             violations=violations,
@@ -661,7 +720,7 @@ class MiniMaxClient:
         trace_content = (
             "[redacted: blocked by chat response policy]"
             if violations
-            else content
+            else candidate_answer
         )
         response_json: dict[str, Any] = {
             "content": trace_content,
@@ -670,7 +729,7 @@ class MiniMaxClient:
         }
         if violations:
             response_json["policy_violations"] = violations
-        if answer != content.strip():
+        if answer != raw_answer:
             response_json["sanitized"] = True
         return answer, request_json, response_json
 
@@ -1103,6 +1162,7 @@ class MiniMaxClient:
         user_message: str = "",
         violations: list[str] | None = None,
     ) -> str:
+        answer = MiniMaxClient._repair_known_non_spanish_fragments(answer)
         violations = violations or MiniMaxClient._chat_answer_policy_violations(
             answer,
             user_message,
@@ -1133,7 +1193,32 @@ class MiniMaxClient:
             violations.append("prompt_disclosure")
         if MiniMaxClient._contains_cjk_script(answer):
             violations.append("non_spanish_language")
+        if MiniMaxClient._contains_english_language_leak(answer):
+            violations.append("non_spanish_language")
         return violations
+
+    @staticmethod
+    def _repair_known_non_spanish_fragments(answer: str) -> str:
+        repaired = answer
+        for pattern, replacement in _KNOWN_NON_SPANISH_FRAGMENT_REPLACEMENTS:
+            repaired = re.sub(pattern, replacement, repaired, flags=re.IGNORECASE)
+        return repaired
+
+    @staticmethod
+    def _contains_english_language_leak(answer: str) -> bool:
+        normalized = _normalize_for_policy(answer)
+        if not normalized:
+            return False
+        if any(phrase in normalized for phrase in _ENGLISH_LANGUAGE_LEAK_PHRASES):
+            return True
+
+        words = re.findall(r"\b[a-z]{2,}\b", normalized)
+        if not words:
+            return False
+        hits = [word for word in words if word in _ENGLISH_LANGUAGE_LEAK_WORDS]
+        if len(hits) >= 4 and len(hits) / len(words) >= 0.18:
+            return True
+        return len(hits) >= 3 and len(hits) / len(words) >= 0.35
 
     @staticmethod
     def _contains_cjk_script(answer: str) -> bool:

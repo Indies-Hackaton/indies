@@ -367,9 +367,10 @@ operations, but their messages and trace rows remain in the database.
   inability/error response body, CJK-script text, or an overlong non-title.
 - Sanitizes chat responses that contain pseudo tool-call syntax and replaces
   them with a grounded fallback based on the executed `TaskResult` objects.
-- Sanitizes chat/synthesis responses containing dominant CJK-script output and
-  replaces them with a Spanish fallback based on the executed `TaskResult`
-  objects.
+- Sanitizes chat/synthesis responses containing dominant CJK-script output or
+  English-language leakage. Known short prompt fragments, including `worth reviewing`,
+  are repaired inline in Spanish; broader non-Spanish answers are replaced with
+  a Spanish fallback based on the executed `TaskResult` objects.
 - Sanitizes chat/synthesis responses that try to satisfy code-generation
   requests or disclose internal prompts/instructions. Mixed requests are
   handled by answering the transparency-data portion and refusing only the
