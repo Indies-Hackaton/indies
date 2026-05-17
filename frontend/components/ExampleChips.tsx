@@ -1,10 +1,9 @@
 import styles from "./ExampleChips.module.css";
 
 const EXAMPLES = [
-  "Órdenes del organismo 7239 el 05 de febrero de 2024",
-  "Órdenes del organismo 1234 el 12 de marzo de 2024",
-  "Todas las órdenes de compra del 10 de enero de 2024",
-  "Todas las órdenes de compra del 20 de abril de 2024",
+  "Sueldos de los asesores del Senador Ossandón en el mes de abril del 2026",
+  "Comparativa de los sueldos de todos los asesores para el cargo de Jefe de Gabinete en abril del 2026, indicando a cuál senador corresponde cada uno.",
+  "Últimas 10 licitaciones ligadas a la Municipalidad de Maipú con sus detalles",
 ];
 
 interface ExampleChipsProps {
