@@ -6,6 +6,7 @@ import type {
   ChatPlannerOut,
   ChatTurn,
   ConversationDetailResponse,
+  FeedbackRating,
   Plan,
 } from "@/lib/types";
 
@@ -161,10 +162,31 @@ export function useConversation() {
     setState((prev) => ({ ...prev, conversationTitle: newTitle }));
   }, []);
 
+  // Patch the feedback rating on an assistant message in local state.
+  const updateTurnFeedback = useCallback(
+    (turnId: string, feedbackRating: FeedbackRating | null) => {
+      setState((prev) => ({
+        ...prev,
+        turns: prev.turns.map((t) =>
+          t.id === turnId && t.assistantMessage
+            ? {
+                ...t,
+                assistantMessage: {
+                  ...t.assistantMessage,
+                  feedback_rating: feedbackRating,
+                },
+              }
+            : t,
+        ),
+      }));
+    },
+    [],
+  );
+
   // Start a fresh conversation.
   const reset = useCallback(() => {
     setState({ conversationId: null, conversationTitle: null, turns: [] });
   }, []);
 
-  return { conversationId, conversationTitle, turns, isLoading, sendMessage, loadConversation, updateTitle, reset };
+  return { conversationId, conversationTitle, turns, isLoading, sendMessage, loadConversation, updateTitle, updateTurnFeedback, reset };
 }

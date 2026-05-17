@@ -307,6 +307,62 @@
   box-shadow: 2px 2px 0 var(--black);
 }
 
+/* ── Feedback buttons ────────────────────────────────────────────── */
+.feedback {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.assistantContent:hover .feedback,
+.feedback:focus-within,
+/* Keep visible when a rating is selected */
+.assistantContent:has(.feedbackBtnActive) .feedback {
+  opacity: 1;
+}
+
+/* Always visible on touch devices */
+@media (hover: none) {
+  .feedback { opacity: 1; }
+}
+
+.feedbackBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-light);
+  background: none;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  white-space: nowrap;
+}
+
+.feedbackBtn:hover:not(:disabled) {
+  color: var(--black);
+  border-color: var(--black);
+  background: var(--surface);
+}
+
+.feedbackBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.feedbackBtnActive {
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+  background: #fff1f1 !important;
+}
+
 /* ── Typing indicator ────────────────────────────────────────────── */
 .typing {
   display: inline-flex;

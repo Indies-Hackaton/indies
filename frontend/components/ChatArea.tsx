@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ChatTurn } from "@/lib/types";
+import type { ChatTurn, FeedbackRating } from "@/lib/types";
 import { ChatInput } from "./ChatInput";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { ExampleChips } from "./ExampleChips";
@@ -43,12 +43,13 @@ interface ChatAreaProps {
   onSubmit: (message: string) => void;
   onRename: (newTitle: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  onFeedback: (turnId: string, rating: FeedbackRating | null) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────
 
 export function ChatArea({
-  turns, isLoading, title, onSubmit, onRename, onDelete,
+  turns, isLoading, title, onSubmit, onRename, onDelete, onFeedback,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -159,7 +160,11 @@ export function ChatArea({
         ) : (
           <div className={styles.messages}>
             {turns.map((turn) => (
-              <MessageBubble key={turn.id} turn={turn} />
+              <MessageBubble
+                key={turn.id}
+                turn={turn}
+                onFeedback={onFeedback}
+              />
             ))}
             <div ref={bottomRef} aria-hidden="true" />
           </div>
