@@ -11,6 +11,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
 
 def utc_now() -> datetime:
     """Return a timezone-aware timestamp for application-managed columns."""
@@ -121,7 +123,31 @@ def normalize_database_url(database_url: str) -> str:
     elif database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
 
-    database_url = database_url.replace("sslmode=require", "ssl=require")
+    if database_url.startswith("postgresql+asyncpg://"):
+        parts = urlsplit(database_url)
+
+        query_params = dict(parse_qsl(parts.query, keep_blank_values=True))
+
+        # Neon/Vercel/Postgres URLs sometimes include params that asyncpg
+        # does not accept as connect() keyword arguments.
+        query_params.pop("channel_binding", None)
+
+        # asyncpg expects ssl=require instead of sslmode=require
+        if query_params.get("sslmode") == "require":
+            query_params.pop("sslmode", None)
+            query_params["ssl"] = "require"
+
+        cleaned_query = urlencode(query_params)
+
+        database_url = urlunsplit(
+            (
+                parts.scheme,
+                parts.netloc,
+                parts.path,
+                cleaned_query,
+                parts.fragment,
+            )
+        )
 
     return database_url
 
