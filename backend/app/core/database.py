@@ -113,16 +113,26 @@ class ToolRunRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
+def normalize_database_url(database_url: str) -> str:
+    """Normalize database URLs for SQLAlchemy async engines."""
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    elif database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+
+    database_url = database_url.replace("sslmode=require", "ssl=require")
+
+    return database_url
+
 def make_engine(database_url: str) -> AsyncEngine:
     """Build the async SQLAlchemy engine for the configured database URL."""
+    database_url = normalize_database_url(database_url)
     url = make_url(database_url)
 
     if url.drivername.startswith("sqlite"):
         _prepare_sqlite_path(database_url)
-        return create_async_engine(
-            database_url,
-            future=True,
-        )
+        return create_async_engine(database_url, future=True)
 
     return create_async_engine(
         database_url,
