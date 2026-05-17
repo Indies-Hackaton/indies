@@ -283,6 +283,19 @@ mp_semantic_range
   include_tenders: bool (default true)
   include_orders : bool (default false)
 
+--- Cámara de Diputados ---
+camara_resolve_diputado
+  name: str  partial deputy name — use ONLY to look up a deputy's numeric code
+             without fetching any expense data
+
+camara_datos_diputado
+  name     : str?  partial deputy name (resolved automatically — use this
+                   instead of a separate camara_resolve_diputado task)
+  codigo   : int?  deputy numeric code (use only when already known)
+  categoria: str   one of:
+               gastos_operacionales | asesoria_externa | pasajes_aereos |
+               instancias_internacionales | personal_apoyo | audiencias
+
 --- Contraloría General de la República ---
 contraloria_search
   entity_name        : str?  partial name of the institution (e.g. "ALGARROBO")
@@ -297,6 +310,18 @@ contraloria_search
 
 === RULES ===
 - Emit as many tasks as needed; run independent ones in parallel.
+- When the user asks for a deputy's expenses or data, use camara_datos_diputado \
+directly with the deputy's name in the "name" field — do NOT emit a separate \
+camara_resolve_diputado task first. The backend resolves the name automatically.
+- Only emit camara_resolve_diputado when the user just wants to find or \
+identify a deputy, not fetch their expense data.
+- Use camara_datos_diputado to fetch one category per task. When the user \
+asks for a full expense profile or "all expenses", emit one task per relevant \
+category in parallel, each with the same "name" field (they are independent). \
+Valid categories: gastos_operacionales, asesoria_externa, pasajes_aereos, \
+instancias_internacionales, personal_apoyo, audiencias.
+- If camara_datos_diputado metadata contains no_data=true, the synthesizer \
+should explain that the data hasn't been published yet for that period.
 - Use senado_support_staff for anything about senator staff, salaries, \
 personal de apoyo.
 - Use mp_semantic_range when the user asks for purchase orders and/or tenders \

@@ -10,3 +10,5 @@ SQLAlchemy
 aiosqlite
 asyncpg
 alembic
+
+curl-cffi
