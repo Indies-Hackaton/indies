@@ -9,3 +9,4 @@ pandas
 SQLAlchemy
 aiosqlite
 asyncpg
+alembic

@@ -13,7 +13,7 @@
       v
 [FastAPI Backend]
       |
-      |-- SQLite                    → conversations, messages, LLM traces, tool runs
+      |-- SQLite/Postgres           → conversations, messages, LLM traces, tool runs
       |-- MiniMax Planner model      → structured API task plan
       |-- Executor                   → Mercado Público + Senado API calls
       |-- MiniMax Chat model         → natural-language response
@@ -28,12 +28,12 @@
 
 ## Backend (`/backend`)
 
-**Stack:** Python · FastAPI · httpx · Pydantic v2 · pydantic-settings · SQLAlchemy async · SQLite/aiosqlite · uvicorn
+**Stack:** Python · FastAPI · httpx · Pydantic v2 · pydantic-settings · SQLAlchemy async · Alembic · SQLite/aiosqlite · Postgres/asyncpg · uvicorn
 
 ### Entry point
 `backend/app/main.py`
 - Creates a shared `httpx.AsyncClient`.
-- Creates the async database engine and runs `CREATE TABLE IF NOT EXISTS` at startup.
+- Creates the async database engine and runs Alembic migrations to `head` at startup.
 - Mounts `MiniMaxClient`, `MercadoPublicoClient`, `SenadoClient`, `ContraloriaService`, and `db_sessionmaker` onto `app.state`.
 - Loads both Contraloría CSV files (~120 MB total) into memory at startup.
 - Enables CORS for origins in `FRONTEND_ORIGINS`.
@@ -220,6 +220,18 @@ Local SQLite paths are prepared at startup: the parent directory is created if
 needed, and a local database file with missing user-write permission is made
 writable for development.
 
+Schema changes are versioned with Alembic:
+- Config: `backend/alembic.ini`
+- Environment: `backend/migrations/env.py`
+- Revisions: `backend/migrations/versions/`
+
+`init_db()` runs `alembic upgrade head` on the app's active async SQLAlchemy
+connection before chat routes serve traffic. On Postgres it wraps the upgrade in
+a transaction-scoped advisory lock so concurrent Vercel cold starts do not run
+the same migration at the same time. The first revision is idempotent so it can
+adopt existing SQLite/Postgres databases created before migrations; it creates
+missing chat tables, indexes, and `conversations.deleted_at`.
+
 | Table | Purpose |
 |---|---|
 | `conversations` | UUID conversation shell with generated/renamable title, timestamps, and nullable `deleted_at` for soft delete |
@@ -348,6 +360,20 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## Database migrations
+
+When ORM models in `backend/app/core/database.py` change, create a versioned
+Alembic migration instead of adding one-off startup DDL:
+
+```bash
+cd backend
+alembic revision --autogenerate -m "describe schema change"
+alembic upgrade head
+```
+
+The FastAPI lifespan also runs `alembic upgrade head` on startup, so deployed
+instances apply pending migrations before serving API traffic.
 
 ## Testing the chat API with curl
 

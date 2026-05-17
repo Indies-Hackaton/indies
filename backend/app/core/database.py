@@ -9,7 +9,6 @@ from typing import Any
 from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
-    AsyncConnection,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
@@ -18,6 +17,9 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+
+_POSTGRES_MIGRATION_LOCK_ID = 587479302120260516
 
 
 def utc_now() -> datetime:
@@ -182,23 +184,30 @@ def make_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
 
 
 async def init_db(engine: AsyncEngine) -> None:
-    """Create tables if they do not already exist."""
+    """Run all pending database migrations."""
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        if conn.sync_connection.dialect.name == "sqlite":
-            await _ensure_sqlite_conversation_deleted_at(conn)
+        if conn.sync_connection.dialect.name == "postgresql":
+            await conn.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": _POSTGRES_MIGRATION_LOCK_ID},
+            )
+            await conn.run_sync(_run_migrations)
+            return
+
+        await conn.run_sync(_run_migrations)
 
 
-async def _ensure_sqlite_conversation_deleted_at(conn: AsyncConnection) -> None:
-    """Add the soft-delete column to existing SQLite databases."""
-    result = await conn.execute(text("PRAGMA table_info(conversations)"))
-    columns = result.fetchall()
-    if any(column[1] == "deleted_at" for column in columns):
-        return
+def _run_migrations(connection: Any) -> None:
+    """Run Alembic migrations using the app's active database connection."""
+    from alembic import command
+    from alembic.config import Config
 
-    await conn.execute(
-        text("ALTER TABLE conversations ADD COLUMN deleted_at DATETIME DEFAULT NULL")
-    )
+    backend_dir = Path(__file__).resolve().parents[2]
+    config = Config(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "migrations"))
+    config.attributes["connection"] = connection
+
+    command.upgrade(config, "head")
 
 
 def _prepare_sqlite_path(database_url: str) -> None:
