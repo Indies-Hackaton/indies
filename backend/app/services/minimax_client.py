@@ -20,6 +20,9 @@ from app.core.text import detect_text_format
 
 _MAX_CHAT_RESULT_RECORDS_PER_RESULT = 80
 _MAX_CHAT_RESULT_RECORD_CHARS = 1500
+_MAX_CHAT_DETAIL_RECORD_CHARS = 12000
+_MAX_CHAT_DETAIL_FIELD_CHARS = 1600
+_MAX_TENDER_ITEMS_FOR_CHAT = 25
 
 _KNOWN_NON_SPANISH_FRAGMENT_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (r"\brecords worth reviewing\b", "registros que ameritan revisión"),
@@ -447,6 +450,10 @@ the conversation history, or the API results.
 - Be concise but informative; 3-8 sentences is usually right.
 - Never respond in Chinese, English, or any other non-Spanish language.
 - Stay within Chilean public-transparency and anti-corruption analysis.
+- In Mercado Publico tender records, `CantidadReclamos` is a buyer/organism
+  claim count for the period reported by Mercado Publico, not complaints filed
+  against that specific tender. Do not use it as evidence that the tender
+  itself received complaints.
 - Never provide programming code, scripts, pseudocode, markdown code fences, \
 or implementation recipes. If the user asks for code, analyze the transparency \
 data instead and briefly say code/scripts cannot be provided.
@@ -519,6 +526,13 @@ for writing/running code.
 - For questions about suspicious, doubtful, or irregular purchases, do not
   assert wrongdoing from procurement listings alone. Identifica registros que
   ameritan revisión, explica las señales observables y declara la limitación.
+- In Mercado Público tender records, `CantidadReclamos` or
+  `ReclamosCompradorPeriodo` is a buyer/organism claim count for the period
+  reported by Mercado Público, not complaints filed against that specific
+  tender. Do not use it as evidence that the tender itself received complaints.
+- Some records may be compacted before they reach you so the prompt stays
+  small. Never mention internal compaction, omitted fields, or prompt-shaping
+  metadata to the user; answer only from the available evidence and sources.
 - Keep the answer concise: 3-8 sentences unless the user asks for detail.
 
 Citation rules:
@@ -767,7 +781,10 @@ class MiniMaxClient:
             if isinstance(records, list):
                 included_records = records[:_MAX_CHAT_RESULT_RECORDS_PER_RESULT]
                 dumped["records"] = [
-                    MiniMaxClient._compact_record_for_chat(record)
+                    MiniMaxClient._compact_record_for_chat(
+                        record,
+                        tool=str(dumped.get("tool") or ""),
+                    )
                     for record in included_records
                 ]
                 omitted = max(0, len(records) - len(included_records))
@@ -796,25 +813,36 @@ class MiniMaxClient:
         return compacted_results
 
     @staticmethod
-    def _compact_record_for_chat(record: Any) -> Any:
+    def _compact_record_for_chat(
+        record: Any,
+        *,
+        tool: str = "",
+        max_record_chars: int = _MAX_CHAT_RESULT_RECORD_CHARS,
+        max_field_chars: int = 700,
+    ) -> Any:
         if not isinstance(record, dict):
             return record
+        if tool == "mp_tender_by_codigo":
+            tender_detail = MiniMaxClient._compact_tender_detail_for_chat(record)
+            if tender_detail is not None:
+                return tender_detail
+
         compacted: dict[str, Any] = {}
         for key, value in record.items():
             if isinstance(value, str):
-                compacted[key] = MiniMaxClient._truncate_text(value, 700)
+                compacted[key] = MiniMaxClient._truncate_text(value, max_field_chars)
             elif isinstance(value, (list, dict)):
                 encoded = json.dumps(value, ensure_ascii=False, default=str)
                 compacted[key] = (
-                    MiniMaxClient._truncate_text(encoded, 700)
-                    if len(encoded) > 700
+                    MiniMaxClient._truncate_text(encoded, max_field_chars)
+                    if len(encoded) > max_field_chars
                     else value
                 )
             else:
                 compacted[key] = value
 
         encoded_record = json.dumps(compacted, ensure_ascii=False, default=str)
-        if len(encoded_record) <= _MAX_CHAT_RESULT_RECORD_CHARS:
+        if len(encoded_record) <= max_record_chars:
             return compacted
         priority_keys = (
             "senator",
@@ -836,16 +864,298 @@ class MiniMaxClient:
         )
         slim = {key: compacted[key] for key in priority_keys if key in compacted}
         if slim:
-            slim["_omitted_fields_for_llm"] = [
-                key for key in compacted.keys() if key not in slim
-            ]
             return slim
         return {
             "_compact_record": MiniMaxClient._truncate_text(
                 encoded_record,
-                _MAX_CHAT_RESULT_RECORD_CHARS,
+                max_record_chars,
             )
         }
+
+    @staticmethod
+    def _compact_tender_detail_for_chat(record: dict[str, Any]) -> dict[str, Any] | None:
+        """Keep tender-by-code details useful without sending the whole payload."""
+        scalar_keys = (
+            "Codigo",
+            "CodigoExterno",
+            "Nombre",
+            "Descripcion",
+            "Estado",
+            "CodigoEstado",
+            "Tipo",
+            "Moneda",
+            "MontoEstimado",
+            "VisibilidadMonto",
+            "Estimacion",
+            "FuenteFinanciamiento",
+            "JustificacionMontoEstimado",
+            "FechaInicio",
+            "FechaCierre",
+            "FechaFinal",
+            "Modalidad",
+            "TipoPago",
+            "TipoDuracionContrato",
+            "TiempoDuracionContrato",
+            "UnidadTiempoDuracionContrato",
+            "EsRenovable",
+            "NombreResponsablePago",
+            "EmailResponsablePago",
+            "NombreResponsableContrato",
+            "EmailResponsableContrato",
+            "FonoResponsableContrato",
+        )
+        compacted = MiniMaxClient._select_present_fields(
+            record,
+            scalar_keys,
+            max_text_chars=_MAX_CHAT_DETAIL_FIELD_CHARS,
+        )
+        claims_count = record.get("CantidadReclamos")
+        if claims_count not in (None, "", [], {}):
+            compacted["ReclamosCompradorPeriodo"] = {
+                "cantidad": claims_count,
+                "alcance": (
+                    "Reclamos asociados al organismo comprador en el periodo "
+                    "informado por Mercado Publico; no son reclamos propios "
+                    "de esta licitacion."
+                ),
+            }
+
+        buyer = MiniMaxClient._compact_nested_section(
+            record.get("Comprador"),
+            (
+                "CodigoOrganismo",
+                "NombreOrganismo",
+                "RutUnidad",
+                "CodigoUnidad",
+                "NombreUnidad",
+                "DireccionUnidad",
+                "ComunaUnidad",
+                "RegionUnidad",
+                "RutUsuario",
+                "CodigoUsuario",
+                "NombreUsuario",
+                "CargoUsuario",
+            ),
+        )
+        if buyer:
+            compacted["Comprador"] = buyer
+
+        dates = MiniMaxClient._compact_nested_section(
+            record.get("Fechas"),
+            (
+                "FechaCreacion",
+                "FechaCierre",
+                "FechaInicio",
+                "FechaFinal",
+                "FechaPubRespuestas",
+                "FechaActoAperturaTecnica",
+                "FechaActoAperturaEconomica",
+                "FechaAdjudicacion",
+                "FechaEstimadaAdjudicacion",
+                "FechaSoporteFisico",
+                "FechaTiempoEvaluacion",
+            ),
+        )
+        if dates:
+            compacted["Fechas"] = dates
+
+        award = MiniMaxClient._compact_nested_section(
+            record.get("Adjudicacion"),
+            (
+                "Tipo",
+                "Fecha",
+                "Numero",
+                "NumeroOferentes",
+                "RutProveedor",
+                "NombreProveedor",
+                "Cantidad",
+                "MontoUnitario",
+            ),
+        )
+        if award:
+            compacted["Adjudicacion"] = award
+
+        items = MiniMaxClient._compact_tender_items(record.get("Items"))
+        if items:
+            compacted["Items"] = items
+            award_summary = MiniMaxClient._tender_award_summary(items.get("Listado"))
+            if award_summary:
+                compacted["ResumenAdjudicacionItems"] = award_summary
+
+        if not compacted:
+            return None
+
+        encoded = json.dumps(compacted, ensure_ascii=False, default=str)
+        if len(encoded) <= _MAX_CHAT_DETAIL_RECORD_CHARS:
+            return compacted
+
+        reduced = dict(compacted)
+        items_value = reduced.get("Items")
+        if isinstance(items_value, dict) and isinstance(items_value.get("Listado"), list):
+            items_value = dict(items_value)
+            items_value["Listado"] = items_value["Listado"][:8]
+            items_value["items_included_for_llm"] = len(items_value["Listado"])
+            reduced["Items"] = items_value
+        return reduced
+
+    @staticmethod
+    def _compact_nested_section(
+        value: Any,
+        keys: tuple[str, ...],
+    ) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            return {}
+        return MiniMaxClient._select_present_fields(
+            value,
+            keys,
+            max_text_chars=_MAX_CHAT_DETAIL_FIELD_CHARS,
+        )
+
+    @staticmethod
+    def _select_present_fields(
+        record: dict[str, Any],
+        keys: tuple[str, ...],
+        *,
+        max_text_chars: int,
+    ) -> dict[str, Any]:
+        selected: dict[str, Any] = {}
+        for key in keys:
+            if key not in record:
+                continue
+            value = record[key]
+            if value in (None, "", [], {}):
+                continue
+            if isinstance(value, str):
+                selected[key] = MiniMaxClient._truncate_text(value, max_text_chars)
+            else:
+                selected[key] = value
+        return selected
+
+    @staticmethod
+    def _compact_tender_items(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            raw_items = value.get("Listado") or value.get("listado") or []
+            reported_count = value.get("Cantidad") or value.get("cantidad")
+        elif isinstance(value, list):
+            raw_items = value
+            reported_count = len(value)
+        else:
+            return {}
+
+        if not isinstance(raw_items, list):
+            return {}
+
+        items = [
+            MiniMaxClient._compact_tender_item(item)
+            for item in raw_items[:_MAX_TENDER_ITEMS_FOR_CHAT]
+            if isinstance(item, dict)
+        ]
+        compacted: dict[str, Any] = {
+            "Cantidad": reported_count if reported_count is not None else len(raw_items),
+            "items_included_for_llm": len(items),
+            "Listado": items,
+        }
+        if len(raw_items) > len(items):
+            compacted["items_not_in_prompt"] = len(raw_items) - len(items)
+        return compacted
+
+    @staticmethod
+    def _compact_tender_item(item: dict[str, Any]) -> dict[str, Any]:
+        compacted = MiniMaxClient._select_present_fields(
+            item,
+            (
+                "Correlativo",
+                "CodigoProducto",
+                "CodigoCategoria",
+                "Categoria",
+                "NombreProducto",
+                "Descripcion",
+                "UnidadMedida",
+                "Cantidad",
+            ),
+            max_text_chars=900,
+        )
+        award = MiniMaxClient._compact_nested_section(
+            item.get("Adjudicacion"),
+            (
+                "Tipo",
+                "Fecha",
+                "Numero",
+                "NumeroOferentes",
+                "RutProveedor",
+                "NombreProveedor",
+                "Cantidad",
+                "MontoUnitario",
+            ),
+        )
+        if award:
+            compacted["Adjudicacion"] = award
+        return compacted
+
+    @staticmethod
+    def _tender_award_summary(items: Any) -> dict[str, Any]:
+        if not isinstance(items, list):
+            return {}
+        awarded_items = 0
+        estimated_total = 0.0
+        has_total = False
+        suppliers: dict[str, dict[str, Any]] = {}
+        offerer_counts: list[int] = []
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            award = item.get("Adjudicacion")
+            if not isinstance(award, dict):
+                continue
+            awarded_items += 1
+            supplier = str(award.get("NombreProveedor") or "").strip()
+            unit_amount = MiniMaxClient._coerce_number(award.get("MontoUnitario"))
+            quantity = MiniMaxClient._coerce_number(
+                award.get("Cantidad") or item.get("Cantidad")
+            )
+            item_total: float | None = None
+            if unit_amount is not None and quantity is not None:
+                item_total = unit_amount * quantity
+                estimated_total += item_total
+                has_total = True
+            if supplier:
+                supplier_entry = suppliers.setdefault(
+                    supplier,
+                    {"NombreProveedor": supplier, "items": 0, "monto_estimado": 0},
+                )
+                supplier_entry["items"] += 1
+                if item_total is not None:
+                    supplier_entry["monto_estimado"] += int(round(item_total))
+            offerers = MiniMaxClient._coerce_number(award.get("NumeroOferentes"))
+            if offerers is not None:
+                offerer_counts.append(int(offerers))
+
+        summary: dict[str, Any] = {}
+        if awarded_items:
+            summary["items_adjudicados"] = awarded_items
+        if has_total:
+            summary["monto_total_estimado_desde_items"] = int(round(estimated_total))
+        if suppliers:
+            summary["proveedores_adjudicados"] = list(suppliers.values())[:10]
+        if offerer_counts:
+            summary["numero_oferentes_por_item"] = offerer_counts[:20]
+        return summary
+
+    @staticmethod
+    def _coerce_number(value: Any) -> float | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value).strip()
+        if not text:
+            return None
+        normalized = text.replace(".", "").replace(",", ".")
+        try:
+            return float(normalized)
+        except ValueError:
+            return None
 
     @staticmethod
     def _truncate_text(value: str, limit: int) -> str:

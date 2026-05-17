@@ -368,7 +368,14 @@ operations, but their messages and trace rows remain in the database.
   internal prompts/instructions, and must always be written in Spanish.
 - Sends a compacted view of large `TaskResult.records` lists to the chat model
   for synthesis; full records remain persisted in `tool_runs` and returned to
-  the frontend receipt/source tables.
+  the frontend receipt/source tables. `mp_tender_by_codigo` uses a richer
+  detail view for the chat model, preserving tender identity, buyer, dates,
+  estimated amount, items, and item-level adjudication fields so single-tender
+  analysis does not lose key fields during prompt compaction. Internal
+  prompt-compaction markers are not exposed as record fields in the chat
+  context. Mercado Público's `CantidadReclamos` tender field is labeled for the
+  chat model as a buyer/organism period claim count, not as complaints filed
+  against the specific tender.
 
 #### `MiniMaxClient` (`backend/app/services/minimax_client.py`)
 - `MINIMAX_MODEL`: structured Planner/API-routing and legacy synthesis.

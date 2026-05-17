@@ -182,6 +182,86 @@ Rules:
             100,
         )
 
+    def test_tender_by_code_keeps_detail_fields_for_chat_response(self) -> None:
+        long_text = "Detalle tecnico especializado. " * 120
+        record = {
+            "CodigoExterno": "2770-136-LR25",
+            "Nombre": "MANTENCION DE REDES DE AGUA POTABLE SMAPA",
+            "Estado": "Adjudicada",
+            "Descripcion": long_text,
+            "MontoEstimado": 123456789,
+            "Moneda": "CLP",
+            "CantidadReclamos": 3197,
+            "Comprador": {
+                "CodigoOrganismo": "2770",
+                "NombreOrganismo": (
+                    "SMAPA - Servicio Municipal de Agua Potable y "
+                    "Alcantarillado de Maipu"
+                ),
+                "ComunaUnidad": "Maipu",
+                "RegionUnidad": "Region Metropolitana de Santiago",
+            },
+            "Fechas": {
+                "FechaCierre": "2025-09-01T15:00:00",
+                "FechaAdjudicacion": "2025-10-10T12:00:00",
+            },
+            "Items": {
+                "Cantidad": 1,
+                "Listado": [
+                    {
+                        "Correlativo": 1,
+                        "NombreProducto": "Mantencion de redes",
+                        "Descripcion": "Servicio integral",
+                        "Cantidad": 2,
+                        "Adjudicacion": {
+                            "NumeroOferentes": 4,
+                            "RutProveedor": "11.111.111-1",
+                            "NombreProveedor": "Proveedor Uno",
+                            "Cantidad": 2,
+                            "MontoUnitario": 5000000,
+                        },
+                    }
+                ],
+            },
+            "CampoGigante": "x" * 20000,
+        }
+        result = TaskResult(
+            task_id="t1",
+            tool="mp_tender_by_codigo",
+            description="Detalle de licitacion",
+            status="ok",
+            records=[record],
+            record_count=1,
+            metadata={},
+        )
+
+        compacted = MiniMaxClient._results_for_chat_response([result])
+        chat_record = compacted[0]["records"][0]
+
+        self.assertNotIn("_omitted_fields_for_llm", chat_record)
+        self.assertNotIn("CantidadReclamos", chat_record)
+        self.assertEqual(chat_record["MontoEstimado"], 123456789)
+        self.assertEqual(chat_record["ReclamosCompradorPeriodo"]["cantidad"], 3197)
+        self.assertIn(
+            "no son reclamos propios de esta licitacion",
+            chat_record["ReclamosCompradorPeriodo"]["alcance"],
+        )
+        self.assertEqual(
+            chat_record["Comprador"]["NombreOrganismo"],
+            "SMAPA - Servicio Municipal de Agua Potable y Alcantarillado de Maipu",
+        )
+        self.assertEqual(chat_record["Fechas"]["FechaCierre"], "2025-09-01T15:00:00")
+        self.assertEqual(
+            chat_record["Items"]["Listado"][0]["Adjudicacion"]["NombreProveedor"],
+            "Proveedor Uno",
+        )
+        self.assertEqual(
+            chat_record["ResumenAdjudicacionItems"][
+                "monto_total_estimado_desde_items"
+            ],
+            10000000,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
