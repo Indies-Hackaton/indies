@@ -1,20 +1,80 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useConversation } from "@/hooks/useConversation";
 import { useConversations } from "@/hooks/useConversations";
 import { deleteConversation, renameConversation } from "@/lib/api";
 import { ChatArea } from "@/components/ChatArea";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
+import { BrandLogo } from "@/components/BrandLogo";
 import { Sidebar } from "@/components/Sidebar";
 import styles from "./page.module.css";
 
 export default function Home() {
   const conversation = useConversation();
   const conversations = useConversations();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  /** Ancho de la columna (rail 44px ↔ panel 260px en desktop). */
+  const [sidebarWide, setSidebarWide] = useState(true);
+  /** Lista y textos del panel; en desktop aparece solo cuando el ancho terminó de abrir. */
+  const [sidebarDetail, setSidebarDetail] = useState(true);
+  const sidebarColRef = useRef<HTMLDivElement>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const isMobileViewport = useCallback(
+    () => typeof window !== "undefined" && window.innerWidth <= 768,
+    [],
+  );
+
+  const closeSidebar = useCallback(() => {
+    setSidebarDetail(false);
+    setSidebarWide(false);
+  }, []);
+
+  const openSidebarMobile = useCallback(() => {
+    setSidebarWide(true);
+    setSidebarDetail(true);
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    if (isMobileViewport()) {
+      if (sidebarWide) closeSidebar();
+      else openSidebarMobile();
+      return;
+    }
+    if (sidebarDetail) {
+      setSidebarDetail(false);
+      setSidebarWide(false);
+      return;
+    }
+    setSidebarWide(true);
+    const col = sidebarColRef.current;
+    if (!col) {
+      setSidebarDetail(true);
+      return;
+    }
+    const raw = getComputedStyle(col).transitionDuration.split(",")[0]?.trim() ?? "0";
+    const durationMs = raw.endsWith("ms")
+      ? parseFloat(raw)
+      : parseFloat(raw) * 1000;
+    if (!durationMs || col.offsetWidth >= 260) {
+      setSidebarDetail(true);
+    }
+  }, [closeSidebar, isMobileViewport, openSidebarMobile, sidebarDetail, sidebarWide]);
+
+  useEffect(() => {
+    const col = sidebarColRef.current;
+    if (!col) return;
+
+    function onTransitionEnd(e: TransitionEvent) {
+      if (e.target !== col || isMobileViewport()) return;
+      if (e.propertyName !== "width") return;
+      if (sidebarWide) setSidebarDetail(true);
+    }
+
+    col.addEventListener("transitionend", onTransitionEnd);
+    return () => col.removeEventListener("transitionend", onTransitionEnd);
+  }, [isMobileViewport, sidebarWide]);
 
   async function handleSubmit(message: string) {
     await conversation.sendMessage(message);
@@ -23,12 +83,12 @@ export default function Home() {
 
   function handleSelectConversation(id: string) {
     conversation.loadConversation(id);
-    if (window.innerWidth < 768) setSidebarOpen(false);
+    if (isMobileViewport()) closeSidebar();
   }
 
   function handleNewConversation() {
     conversation.reset();
-    if (window.innerWidth < 768) setSidebarOpen(false);
+    if (isMobileViewport()) closeSidebar();
   }
 
   async function handleRename(id: string, newTitle: string) {
@@ -64,23 +124,21 @@ export default function Home() {
 
       {/* ── Header ── */}
       <header className={styles.header}>
-        <div className={styles.headerLeft}>
+        <div className={styles.headerBrand}>
           <button
             className={styles.hamburger}
             type="button"
-            onClick={() => setSidebarOpen((v) => !v)}
+            onClick={toggleSidebar}
             aria-label="Abrir menú"
-            aria-expanded={sidebarOpen}
+            aria-expanded={sidebarWide}
           >
             ☰
           </button>
-          <span className={styles.logo}>
-            IN<span className={styles.logoAccent}>D</span>IES
-          </span>
-          <span className={styles.tagline}>
-            Transparencia en compras públicas · Chile
-          </span>
+          <BrandLogo mode="full" size="md" />
         </div>
+        <p className={styles.tagline}>
+          Mercado Público, Contraloría y Congreso · Chile
+        </p>
         <div className={styles.headerRight}>
           <span className={styles.dateBadge}>
             {new Date().toLocaleDateString("es-CL", {
@@ -95,21 +153,24 @@ export default function Home() {
       {/* ── Body ── */}
       <div className={styles.body}>
 
-        {sidebarOpen && (
+        {sidebarWide && (
           <div
             className={styles.backdrop}
-            onClick={() => setSidebarOpen(false)}
+            onClick={closeSidebar}
             aria-hidden="true"
           />
         )}
 
-        <div className={`${styles.sidebarCol} ${sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed}`}>
+        <div
+          ref={sidebarColRef}
+          className={`${styles.sidebarCol} ${sidebarWide ? styles.sidebarOpen : styles.sidebarClosed}`}
+        >
           <Sidebar
             conversations={conversations.conversations}
             activeId={conversation.conversationId}
             isLoading={conversations.isLoading}
-            isOpen={sidebarOpen}
-            onToggle={() => setSidebarOpen((v) => !v)}
+            isOpen={sidebarDetail}
+            onToggle={toggleSidebar}
             onSelect={handleSelectConversation}
             onNew={handleNewConversation}
             onRename={handleRename}

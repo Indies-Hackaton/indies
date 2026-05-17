@@ -165,7 +165,11 @@ function ConvItem({ conv, isActive, onSelect, onRename, onDeleteRequest }: ConvI
           aria-current={isActive ? "page" : undefined}
         >
           <span className={styles.itemTitle}>{conv.title}</span>
-          <span className={styles.itemMeta}>{conv.message_count} msg</span>
+          <span className={styles.itemMeta}>
+            {conv.message_count === 1
+              ? "1 mensaje"
+              : `${conv.message_count} mensajes`}
+          </span>
         </button>
       )}
 
@@ -232,8 +236,10 @@ export function Sidebar({
       {isOpen ? (
         <div className={styles.newBtnWrap}>
           <button className={styles.newBtn} type="button" onClick={onNew}>
-            <ComposeIcon />
-            Nueva conversación
+            <span className={styles.newBtnIcon} aria-hidden="true">
+              <ComposeIcon />
+            </span>
+            <span>Nueva conversación</span>
           </button>
         </div>
       ) : (
@@ -259,7 +265,11 @@ export function Sidebar({
 
           {!isLoading && conversations.length === 0 && (
             <p className={styles.empty}>
-              Sin conversaciones aún.<br />Empieza una nueva arriba.
+              Aún no hay conversaciones.
+              <span className={styles.emptyHint}>
+                Pulsa «Nueva conversación» para consultar Mercado Público,
+                Contraloría o el Congreso.
+              </span>
             </p>
           )}
 

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Indies — Transparencia en compras públicas",
+  title: "VigIA — Datos públicos de Chile",
   description:
-    "Consulta órdenes de compra del Estado chileno en lenguaje natural.",
+    "Mercado Público, Contraloría y Congreso en Chile. Pregunta en lenguaje natural.",
 };
 
 export default function RootLayout({

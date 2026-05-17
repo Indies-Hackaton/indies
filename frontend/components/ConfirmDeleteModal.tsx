@@ -50,8 +50,9 @@ export function ConfirmDeleteModal({
           Eliminar conversación
         </h2>
         <p className={styles.description} id="delete-modal-desc">
+          La conversación{" "}
           <span className={styles.convTitle}>&ldquo;{title}&rdquo;</span>{" "}
-          será eliminada permanentemente. Esta acción no se puede deshacer.
+          se eliminará de forma permanente. No se puede deshacer.
         </p>
 
         <div className={styles.actions}>

@@ -1,8 +1,12 @@
 .section {
   width: 100%;
-  border: var(--border-thin);
-  background: var(--surface);
-  margin-top: 6px;
+  min-width: 0;
+  border: var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  margin-top: 4px;
+  overflow: hidden;
+  box-shadow: var(--shadow-brutal-sm);
 }
 
 /* ── Collapsible header ──────────────────────────────────────────── */
@@ -74,6 +78,16 @@
   opacity: 0.55;
 }
 
+.rowActive {
+  animation: highlight 1.8s ease-out forwards;
+}
+
+@keyframes highlight {
+  0%   { background: #fff3f3; }
+  60%  { background: #fff3f3; }
+  100% { background: transparent; }
+}
+
 .rowHeader {
   width: 100%;
   display: flex;
@@ -129,10 +143,15 @@
 
 /* ── Row body ────────────────────────────────────────────────────── */
 .rowBody {
-  padding: 0 12px 12px;
+  padding: 0 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .apiCall {
