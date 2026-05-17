@@ -3,7 +3,7 @@ import styles from "./ExampleChips.module.css";
 const EXAMPLES = [
   "Sueldos de los asesores del Senador Ossandón en el mes de abril del 2026",
   "Comparativa de los sueldos de todos los asesores para el cargo de Jefe de Gabinete en abril del 2026, indicando a cuál senador corresponde cada uno.",
-  "Órdenes de compra de la Municipalidad de Maipú del 12 de marzo de 2026",
+  "Órdenes de compra de la Municipalidad de Maipú del 12 de marzo de 2026, con sus detalles",
 ];
 
 interface ExampleChipsProps {
