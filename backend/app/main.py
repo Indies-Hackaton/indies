@@ -52,10 +52,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.mercado_publico_client = MercadoPublicoClient(settings, http_client)
     app.state.senado_client = SenadoClient(http_client)
     _data_dir = Path(__file__).parent.parent.parent / "data"  # indies/data/
-    app.state.contraloria = ContraloriaService(
-        municipalidades_path=str(_data_dir / "Municipalidades_Contraloria.csv"),
-        no_municipales_path=str(_data_dir / "No_Municipales_Contraloria.csv"),
-    )
+    #app.state.contraloria = ContraloriaService(
+    #    municipalidades_path=str(_data_dir / "Municipalidades_Contraloria.csv"),
+    #    no_municipales_path=str(_data_dir / "No_Municipales_Contraloria.csv"),
+    #)
 
     try:
         yield
