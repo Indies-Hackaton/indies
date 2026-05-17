@@ -27,6 +27,13 @@ Tool catalogue (keep in sync with the Planner prompt):
     contraloria_search          entity_name?, year_min?, year_max?, region?,
                                 tipo_fiscalizacion?, complejidad?, keywords,
                                 source (municipalidades|no_municipales|both), limit?
+
+  Cámara de Diputados:
+    camara_resolve_diputado     name → [{codigo, nombre}]
+    camara_datos_diputado       name OR codigo, categoria (gastos_operacionales |
+                                asesoria_externa | pasajes_aereos |
+                                instancias_internacionales | personal_apoyo |
+                                audiencias) — resolves name inline if codigo absent/0
 """
 
 import asyncio
@@ -37,6 +44,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.core.text import normalize_text
+from app.services.camara import CamaraError, CamaraService
 from app.services.contraloria import ContraloriaError, ContraloriaService
 from app.services.mercado_publico import MercadoPublicoClient, MercadoPublicoError
 from app.services.models import Plan, Task, TaskResult
@@ -63,10 +71,12 @@ class Executor:
         mp: MercadoPublicoClient,
         senado: SenadoClient,
         contraloria: ContraloriaService,
+        camara: CamaraService,
     ) -> None:
         self._mp = mp
         self._senado = senado
         self._contraloria = contraloria
+        self._camara = camara
 
     # ------------------------------------------------------------------
     # Public
@@ -94,7 +104,7 @@ class Executor:
                 record_count=len(records),
                 metadata=metadata,
             )
-        except (ExecutorError, SenadoScraperError, MercadoPublicoError, ContraloriaError, ValueError) as exc:
+        except (ExecutorError, SenadoScraperError, MercadoPublicoError, ContraloriaError, CamaraError, ValueError) as exc:
             return TaskResult(
                 task_id=task.id,
                 tool=task.tool,
@@ -215,6 +225,34 @@ class Executor:
                 keywords=p.get("keywords") or [],
                 source=p.get("source") or "both",
                 limit=int(p["limit"]) if p.get("limit") is not None else 50,
+            )
+            return records, metadata
+
+        # ── Cámara de Diputados ──────────────────────────────────────────
+        if tool == "camara_resolve_diputado":
+            _require(p, "name")
+            candidates = await self._camara.resolve_diputado(p["name"])
+            return candidates, {"total_candidates": len(candidates)}
+
+        if tool == "camara_datos_diputado":
+            _require(p, "categoria")
+            codigo = p.get("codigo")
+            if not codigo or int(codigo) == 0:
+                _require(p, "name")
+                candidates = await self._camara.resolve_diputado(str(p["name"]))
+                if not candidates:
+                    raise CamaraError(f"No deputy found matching {p['name']!r}")
+                if len(candidates) > 1:
+                    # Ambiguous: return candidates so synthesizer can ask to clarify
+                    return candidates, {
+                        "ambiguous": True,
+                        "candidates": candidates,
+                        "categoria": p["categoria"],
+                    }
+                codigo = candidates[0]["codigo"]
+            records, metadata = await self._camara.fetch_categoria(
+                codigo=int(codigo),
+                categoria=str(p["categoria"]),
             )
             return records, metadata
 

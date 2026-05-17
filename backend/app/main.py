@@ -17,6 +17,7 @@ from app.api.routes import router as audit_router
 from app.api.senado_routes import router as senado_router
 from app.core.config import get_settings
 from app.core.database import init_db, make_engine, make_sessionmaker
+from app.services.camara import CamaraService
 from app.services.contraloria import ContraloriaService
 from app.services.mercado_publico import MercadoPublicoClient
 from app.services.minimax_client import MiniMaxClient
@@ -50,7 +51,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.minimax_client = MiniMaxClient(settings, http_client)
     app.state.mercado_publico_client = MercadoPublicoClient(settings, http_client)
     app.state.senado_client = SenadoClient(http_client)
-    app.state.contraloria = await ContraloriaService.create(settings.CONTRALORIA_DATABASE_URL)
+    app.state.contraloria = await ContraloriaService.create(settings.DATABASE_URL)
+    app.state.camara = CamaraService(
+        pool=app.state.contraloria._pool,  # reuse the same Neon pool
+    )
 
     try:
         yield

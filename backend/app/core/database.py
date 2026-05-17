@@ -6,12 +6,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+
+_POSTGRES_MIGRATION_LOCK_ID = 587479302120260516
 
 
 def utc_now() -> datetime:
@@ -32,6 +40,14 @@ class ConversationRecord(Base):
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    feedback_rating: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    feedback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    feedback_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     messages: Mapped[list["MessageRecord"]] = relationship(
         back_populates="conversation",
@@ -55,6 +71,10 @@ class MessageRecord(Base):
     status: Mapped[str] = mapped_column(String(20), default="completed", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    feedback_rating: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    feedback_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     conversation: Mapped[ConversationRecord] = relationship(back_populates="messages")
 
@@ -173,9 +193,30 @@ def make_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
 
 
 async def init_db(engine: AsyncEngine) -> None:
-    """Create tables if they do not already exist."""
+    """Run all pending database migrations."""
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        if conn.sync_connection.dialect.name == "postgresql":
+            await conn.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": _POSTGRES_MIGRATION_LOCK_ID},
+            )
+            await conn.run_sync(_run_migrations)
+            return
+
+        await conn.run_sync(_run_migrations)
+
+
+def _run_migrations(connection: Any) -> None:
+    """Run Alembic migrations using the app's active database connection."""
+    from alembic import command
+    from alembic.config import Config
+
+    backend_dir = Path(__file__).resolve().parents[2]
+    config = Config(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "migrations"))
+    config.attributes["connection"] = connection
+
+    command.upgrade(config, "head")
 
 
 def _prepare_sqlite_path(database_url: str) -> None:

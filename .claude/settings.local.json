@@ -11,7 +11,9 @@
       "Bash(.venv/bin/python *)",
       "Bash(/Users/nahuelgomezraguileo/Proyectos/chile-is-data/indies/backend/.venv/bin/pip list *)",
       "Bash(curl *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "WebFetch(domain:www.camara.cl)",
+      "Bash(grep -oE '\\\\$\\\\.[a-z]+\\\\\\([^\\)]*\\\\\\)')"
     ]
   },
   "enabledPlugins": {
