@@ -283,6 +283,18 @@ mp_semantic_range
   include_tenders: bool (default true)
   include_orders : bool (default false)
 
+--- Contraloría General de la República ---
+contraloria_search
+  entity_name        : str?  partial name of the institution (e.g. "ALGARROBO")
+  year_min           : int?  earliest publication year (e.g. 2021)
+  year_max           : int?  latest publication year  (e.g. 2023)
+  region             : str?  Chilean region name (partial, e.g. "VALPARAISO")
+  tipo_fiscalizacion : str?  audit type (AUDITORIA | INSPECCION_OBRA_PUBLICA | ...)
+  complejidad        : str?  COMPLEJA | MEDIANAMENTE COMPLEJA | LEVEMENTE COMPLEJA
+  keywords           : list  search terms across subject/objective/finding text
+  source             : str   "municipalidades" | "no_municipales" | "both" (default "both")
+  limit              : int   max rows to return (default 50, max 200)
+
 === RULES ===
 - Emit as many tasks as needed; run independent ones in parallel.
 - Use senado_support_staff for anything about senator staff, salaries, \
@@ -291,8 +303,13 @@ personal de apoyo.
 for a named institution over a date range. Product/service keywords are \
 optional; use keywords: [] for broad searches such as suspicious/doubtful \
 purchase or tender reviews.
+- Use contraloria_search when the user asks about Contraloría findings, \
+audits, observaciones, fiscalizaciones, or irregularidades involving any \
+public institution or municipality. Set source="municipalidades" for \
+municipality questions, "no_municipales" for other public entities, "both" \
+when unsure.
 - Use mp_semantic_range when the user gives an institution name, a date \
-range, and product/service keywords.
+range, and product/service keywords (Mercado Público procurement data).
 - Use mp_orders_by_org_and_date when the user asks for purchase orders for a \
 named public organism and a single date; pass the name as organism_name if no \
 numeric code is provided.

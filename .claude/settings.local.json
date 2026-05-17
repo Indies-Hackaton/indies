@@ -4,7 +4,14 @@
       "Bash(python3 -m venv /tmp/indies_venv)",
       "Bash(/tmp/indies_venv/bin/pip install *)",
       "Bash(/tmp/indies_venv/bin/python -c \"from app.main import app; print\\('app imported OK, routes:', [r.path for r in app.routes if hasattr\\(r,'path'\\)]\\)\")",
-      "Bash(/tmp/indies_venv/bin/python -c ' *)"
+      "Bash(/tmp/indies_venv/bin/python -c ' *)",
+      "Bash(iconv -f LATIN1 -t UTF-8)",
+      "Bash(awk '-F;' '{for\\(i=1;i<=NF;i++\\) print i\": \"$i}')",
+      "Bash(python *)",
+      "Bash(.venv/bin/python *)",
+      "Bash(/Users/nahuelgomezraguileo/Proyectos/chile-is-data/indies/backend/.venv/bin/pip list *)",
+      "Bash(curl *)",
+      "Bash(python3 -c ' *)"
     ]
   },
   "enabledPlugins": {

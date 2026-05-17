@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.services.chat_service import ChatNotFoundError, ChatService
+from app.services.contraloria import ContraloriaService
 from app.services.mercado_publico import MercadoPublicoClient
 from app.services.minimax_client import MiniMaxClient
 from app.services.models import (
@@ -49,6 +50,10 @@ def get_senado_client(request: Request) -> SenadoClient:
     return request.app.state.senado_client
 
 
+def get_contraloria_service(request: Request) -> ContraloriaService:
+    return request.app.state.contraloria
+
+
 SessionFactory = Annotated[
     async_sessionmaker[AsyncSession],
     Depends(get_sessionmaker),
@@ -66,6 +71,7 @@ async def send_chat_message(
     minimax: MiniMaxClient = Depends(get_minimax_client),
     mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
     senado: SenadoClient = Depends(get_senado_client),
+    contraloria: ContraloriaService = Depends(get_contraloria_service),
 ) -> ChatMessageResponse:
     """Create or continue a conversation and return the assistant response."""
     async with sessionmaker() as session:
@@ -74,6 +80,7 @@ async def send_chat_message(
             minimax=minimax,
             mercado_publico=mercado_publico,
             senado=senado,
+            contraloria=contraloria,
         )
         try:
             return await service.handle_message(
@@ -97,6 +104,7 @@ async def list_conversations(
     minimax: MiniMaxClient = Depends(get_minimax_client),
     mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
     senado: SenadoClient = Depends(get_senado_client),
+    contraloria: ContraloriaService = Depends(get_contraloria_service),
 ) -> list[ConversationListItem]:
     """Return conversation metadata ordered by recent activity."""
     async with sessionmaker() as session:
@@ -105,6 +113,7 @@ async def list_conversations(
             minimax=minimax,
             mercado_publico=mercado_publico,
             senado=senado,
+            contraloria=contraloria,
         )
         return await service.list_conversations()
 
@@ -120,6 +129,7 @@ async def get_conversation(
     minimax: MiniMaxClient = Depends(get_minimax_client),
     mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
     senado: SenadoClient = Depends(get_senado_client),
+    contraloria: ContraloriaService = Depends(get_contraloria_service),
 ) -> ConversationDetailResponse:
     """Return a full conversation, including linked LLM and API traces."""
     async with sessionmaker() as session:
@@ -128,6 +138,7 @@ async def get_conversation(
             minimax=minimax,
             mercado_publico=mercado_publico,
             senado=senado,
+            contraloria=contraloria,
         )
         try:
             return await service.get_conversation(conversation_id)

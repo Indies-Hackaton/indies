@@ -5,6 +5,7 @@ service clients (MiniMax + Mercado Publico) and the API router.
 """
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
@@ -17,6 +18,7 @@ from app.api.routes import router as audit_router
 from app.api.senado_routes import router as senado_router
 from app.core.config import get_settings
 from app.core.database import init_db, make_engine, make_sessionmaker
+from app.services.contraloria import ContraloriaService
 from app.services.mercado_publico import MercadoPublicoClient
 from app.services.minimax_client import MiniMaxClient
 from app.services.senado_scraper import SenadoClient
@@ -49,6 +51,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.minimax_client = MiniMaxClient(settings, http_client)
     app.state.mercado_publico_client = MercadoPublicoClient(settings, http_client)
     app.state.senado_client = SenadoClient(http_client)
+    _data_dir = Path(__file__).parent.parent.parent / "data"  # indies/data/
+    app.state.contraloria = ContraloriaService(
+        municipalidades_path=str(_data_dir / "Municipalidades_Contraloria.csv"),
+        no_municipales_path=str(_data_dir / "No_Municipales_Contraloria.csv"),
+    )
 
     try:
         yield
