@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     "Mercado Público, Contraloría y Congreso en Chile. Pregunta en lenguaje natural.",
   icons: {
-    icon: [{ url: "/favicon.png", type: "image/png", sizes: "512x512" }],
+    icon: [{ url: "/favicon.png", type: "image/png", sizes: "512x456" }],
     shortcut: "/favicon.png",
     apple: "/favicon.png",
   },
