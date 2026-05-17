@@ -69,7 +69,7 @@ Si `conversation_id` es `null`, el backend crea una conversación nueva y genera
 
 | Tool | Qué hace | Parámetros |
 |---|---|---|
-| `senado_support_staff` | Personal de apoyo del Senado. | `year`, `month_es`, opcional `senator_name`, `staff_name`. |
+| `senado_support_staff` | Personal de apoyo del Senado. | `year`, `month_es`, opcional `senator_name`, `staff_name`, `role`. |
 | `mp_orders_by_org_and_date` | Órdenes por organismo y fecha. | `fecha` (`ddmmyyyy`) + `codigoorg` u `organism_name`. |
 | `mp_orders_by_date` | Órdenes por fecha. | `fecha`. |
 | `mp_tender_by_codigo` | Licitación por código. | `codigo`. |

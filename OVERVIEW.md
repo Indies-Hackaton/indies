@@ -145,6 +145,8 @@ Rendering marker:
   mutate `content`.
 
 Response policy:
+- Assistant messages must always be in Spanish, regardless of the user's
+  language, prior conversation history, or API result language.
 - Assistant messages are limited to Chilean public-transparency and
   anti-corruption analysis.
 - If a user asks for programming code/scripts, the backend must not return code;
@@ -160,6 +162,8 @@ Response policy:
   `response_json.policy_violations` lists the triggered policy checks, and
   `response_json.content` is redacted as
   `"[redacted: blocked by chat response policy]"`.
+  Current checks include pseudo tool-call syntax, code generation, internal
+  prompt disclosure, and dominant CJK-script responses.
 - Conversation-detail responses redact `system` message contents inside
   `llm_invocations[].request_json.messages` as
   `"[redacted: internal system prompt]"`; the database still stores the full
@@ -344,7 +348,10 @@ operations, but their messages and trace rows remain in the database.
 - Calls the chat model to produce the final natural-language answer. The
   assistant response is expected to describe already executed results, not to
   emit `[TOOL_CALL]` blocks, future API-call instructions, programming code, or
-  internal prompts/instructions.
+  internal prompts/instructions, and must always be written in Spanish.
+- Sends a compacted view of large `TaskResult.records` lists to the chat model
+  for synthesis; full records remain persisted in `tool_runs` and returned to
+  the frontend receipt/source tables.
 
 #### `MiniMaxClient` (`backend/app/services/minimax_client.py`)
 - `MINIMAX_MODEL`: structured Planner/API-routing and legacy synthesis.
@@ -354,22 +361,29 @@ operations, but their messages and trace rows remain in the database.
   Planner only resolves `Municipalidad de Maipú` but the user asked for compras
   or licitaciones over a date range, the backend rewrites the plan to
   `mp_semantic_range` with the extracted organism, range, and include flags.
-- Cleans generated titles and falls back to a short title from the first user
-  message when the chat model returns markdown, an assistant-style sentence, an
-  inability/error response body, or an overlong non-title.
+- Cleans generated titles and falls back to a short local title from the first
+  user message, or `Nueva conversación` when no Latin/Spanish title terms
+  remain, when the chat model returns markdown, an assistant-style sentence, an
+  inability/error response body, CJK-script text, or an overlong non-title.
 - Sanitizes chat responses that contain pseudo tool-call syntax and replaces
   them with a grounded fallback based on the executed `TaskResult` objects.
+- Sanitizes chat/synthesis responses containing dominant CJK-script output and
+  replaces them with a Spanish fallback based on the executed `TaskResult`
+  objects.
 - Sanitizes chat/synthesis responses that try to satisfy code-generation
   requests or disclose internal prompts/instructions. Mixed requests are
   handled by answering the transparency-data portion and refusing only the
   forbidden portion.
+- Repairs Senate support-staff plans by moving cargo/rol/función/puesto terms
+  such as `conductor` into the `senado_support_staff.role` parameter when the
+  Planner omits that structured filter.
 
 #### `Executor` (`backend/app/services/executor.py`)
 Runs Planner tasks concurrently. Supported tools:
 
 | Tool | Required params |
 |---|---|
-| `senado_support_staff` | `year`, `month_es`, optional `senator_name`, `staff_name` |
+| `senado_support_staff` | `year`, `month_es`, optional `senator_name`, `staff_name`, `role` |
 | `mp_orders_by_org_and_date` | `fecha` + `codigoorg` or `organism_name` |
 | `mp_orders_by_date` | `fecha` |
 | `mp_tender_by_codigo` | `codigo` |

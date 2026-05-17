@@ -145,7 +145,8 @@ class ChatService:
                 assistant_message,
                 (
                     "No pude planificar las llamadas necesarias para responder "
-                    f"esta consulta. Detalle: {exc}"
+                    "esta consulta. El detalle técnico queda disponible en la "
+                    "traza de la conversación."
                 ),
                 status="failed",
             )
@@ -662,18 +663,21 @@ def _fallback_title(first_message: str) -> str:
 def _fallback_answer(
     total_records: int,
     results: list[TaskResult],
-    error: str,
+    _error: str,
 ) -> str:
     failed = sum(1 for result in results if result.status == "error")
+    error_note = (
+        " El detalle técnico queda disponible en la traza de la conversación."
+    )
     if total_records:
         return (
             f"Ejecuté las consultas y encontré {total_records} registros, "
             "pero no pude generar la síntesis final en lenguaje natural. "
-            f"Hubo {failed} tareas con error. Detalle del modelo: {error}"
+            f"Hubo {failed} tareas con error.{error_note}"
         )
     return (
         "No pude generar la síntesis final en lenguaje natural. "
-        f"Hubo {failed} tareas con error. Detalle del modelo: {error}"
+        f"Hubo {failed} tareas con error.{error_note}"
     )
 
 

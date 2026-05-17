@@ -21,7 +21,7 @@ Tool catalogue (keep in sync with the Planner prompt):
                                 keywords, include_orders, include_tenders
 
   Senate:
-    senado_support_staff        year, month_es, senator_name?, staff_name?
+    senado_support_staff        year, month_es, senator_name?, staff_name?, role?
 
   Contraloría:
     contraloria_search          entity_name?, year_min?, year_max?, region?,
@@ -127,6 +127,7 @@ class Executor:
                 month=str(p["month_es"]),
                 senator=p.get("senator_name"),
                 support_staff=p.get("staff_name"),
+                role=p.get("role"),
             )
             return df.to_dict(orient="records"), {}
 

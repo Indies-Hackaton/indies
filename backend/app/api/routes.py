@@ -86,13 +86,19 @@ async def audit_query(
     except MiniMaxError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Planner failed: {exc}",
+            detail=(
+                "No pude planificar las llamadas necesarias para responder "
+                "esta consulta."
+            ),
         ) from exc
 
     if not plan.tasks:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="The planner produced an empty task list. Try rephrasing your question.",
+            detail=(
+                "El planificador no produjo llamadas para ejecutar. "
+                "Intenta reformular la pregunta."
+            ),
         )
 
     # ── Step 2: Execute ───────────────────────────────────────────────────────
@@ -102,9 +108,12 @@ async def audit_query(
     # ── Step 3: Synthesize ────────────────────────────────────────────────────
     try:
         synthesis = await minimax.synthesize(payload.message, results)
-    except MiniMaxError as exc:
+    except MiniMaxError:
         # Non-fatal: return data even if synthesis fails.
-        synthesis = f"(Synthesis unavailable: {exc})"
+        synthesis = (
+            "No pude generar la síntesis final en lenguaje natural, pero los "
+            "resultados de las consultas están disponibles."
+        )
 
     total_records = sum(r.record_count for r in results)
     return AuditResponse(

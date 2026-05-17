@@ -170,6 +170,7 @@ class SenadoClient:
         month: str,
         senator: str | None = None,
         support_staff: str | None = None,
+        role: str | None = None,
     ) -> pd.DataFrame:
         """Fetch and return support-staff salary data as a clean DataFrame.
 
@@ -183,6 +184,8 @@ class SenadoClient:
             Optional accent-insensitive substring filter on senator name.
         support_staff:
             Optional accent-insensitive substring filter on staff name.
+        role:
+            Optional accent-insensitive word filter on the staff role/cargo.
 
         Returns
         -------
@@ -214,6 +217,9 @@ class SenadoClient:
 
         if support_staff:
             records = [r for r in records if name_matches(support_staff, r["staff_name"])]
+
+        if role:
+            records = [r for r in records if name_matches(role, r["role"])]
 
         df = pd.DataFrame(records, columns=_COLUMNS)
         print(df.to_string(index=False))
