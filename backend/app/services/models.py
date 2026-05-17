@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+TextFormat = Literal["plain_text", "markdown"]
+
 
 class Task(BaseModel):
     """A single API call in the execution plan."""
@@ -49,6 +51,13 @@ class AuditResponse(BaseModel):
     plan: Plan
     results: list[TaskResult]
     synthesis: str = Field(description="LLM-generated human-readable summary.")
+    synthesis_format: TextFormat = Field(
+        default="plain_text",
+        description=(
+            "Rendering hint for synthesis. Use 'markdown' to parse the text as "
+            "Markdown, otherwise render it as plain text."
+        ),
+    )
     total_records: int
 
 
@@ -68,6 +77,13 @@ class MessageOut(BaseModel):
     conversation_id: str
     role: Literal["user", "assistant"]
     content: str
+    content_format: TextFormat = Field(
+        default="plain_text",
+        description=(
+            "Rendering hint for content. Use 'markdown' to parse the text as "
+            "Markdown, otherwise render it as plain text."
+        ),
+    )
     status: Literal["processing", "completed", "failed"]
     created_at: datetime
     updated_at: datetime

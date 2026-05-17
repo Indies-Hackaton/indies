@@ -5,7 +5,25 @@ casing. Comparing them reliably requires a normalisation step, centralised here
 so the organism resolver and the audit pipeline behave identically.
 """
 
+import re
 import unicodedata
+from typing import Literal
+
+
+TextFormat = Literal["plain_text", "markdown"]
+
+_MARKDOWN_PATTERNS = (
+    re.compile(r"(?m)^\s{0,3}#{1,6}\s+\S"),
+    re.compile(r"(?m)^\s{0,3}(?:[-*+])\s+\S"),
+    re.compile(r"(?m)^\s{0,3}\d+[.)]\s+\S"),
+    re.compile(r"(?m)^\s{0,3}>\s+\S"),
+    re.compile(r"(?m)^\s{0,3}```"),
+    re.compile(r"(?m)^\s{0,3}(?:[-*_]){3,}\s*$"),
+    re.compile(r"`[^`\n]+`"),
+    re.compile(r"\[[^\]\n]+\]\([^)]+\)"),
+    re.compile(r"(?m)^\|.+\|\s*$"),
+    re.compile(r"(\*\*|__)[^\n]+?\1"),
+)
 
 
 def normalize_text(value: str) -> str:
@@ -18,6 +36,15 @@ def normalize_text(value: str) -> str:
         char for char in decomposed if not unicodedata.combining(char)
     )
     return " ".join(without_accents.upper().split())
+
+
+def detect_text_format(value: str) -> TextFormat:
+    """Return the rendering format clients should use for generated text."""
+    if not value.strip():
+        return "plain_text"
+    if any(pattern.search(value) for pattern in _MARKDOWN_PATTERNS):
+        return "markdown"
+    return "plain_text"
 
 
 def name_matches(query: str, full_name: str) -> bool:

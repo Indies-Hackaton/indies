@@ -87,6 +87,7 @@ Response:
     "conversation_id": "uuid",
     "role": "user",
     "content": "...",
+    "content_format": "plain_text",
     "status": "completed",
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
@@ -98,6 +99,7 @@ Response:
     "conversation_id": "uuid",
     "role": "assistant",
     "content": "Encontré registros relevantes...",
+    "content_format": "plain_text",
     "status": "completed",
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
@@ -119,6 +121,44 @@ Response:
 Errors:
 - `404` when `conversation_id` does not exist.
 - The endpoint generally persists failures as `assistant_message.status="failed"` when the Planner cannot produce a plan.
+
+Rendering marker:
+- `user_message.content_format`, `assistant_message.content_format`, and
+  `messages[].content_format` in conversation-detail responses are either
+  `"plain_text"` or `"markdown"`.
+- When the value is `"markdown"`, the frontend should render `content` through
+  a Markdown renderer. When it is `"plain_text"`, render the string normally.
+- The backend computes this marker from the generated/stored text; it does not
+  mutate `content`.
+
+### `POST /api/v1/audit/query`
+
+Request:
+```json
+{
+  "message": "Analiza las compras de una municipalidad"
+}
+```
+
+Response:
+```json
+{
+  "plan": {
+    "tasks": [],
+    "reasoning": "..."
+  },
+  "results": [],
+  "synthesis": "Encontré registros relevantes...",
+  "synthesis_format": "plain_text",
+  "total_records": 0
+}
+```
+
+Rendering marker:
+- `synthesis_format` is either `"plain_text"` or `"markdown"`.
+- When `synthesis_format` is `"markdown"`, the frontend should render
+  `synthesis` through a Markdown renderer. When it is `"plain_text"`, render it
+  normally.
 
 ### Persistence
 `backend/app/core/database.py`

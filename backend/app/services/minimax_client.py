@@ -16,6 +16,7 @@ import httpx
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.core.config import Settings
+from app.core.text import detect_text_format
 
 
 class MiniMaxError(RuntimeError):
@@ -545,7 +546,11 @@ class MiniMaxClient:
             temperature=0.2,
         )
         answer = self._clean_chat_answer(content.strip(), results)
-        response_json: dict[str, Any] = {"content": content, "answer": answer}
+        response_json: dict[str, Any] = {
+            "content": content,
+            "answer": answer,
+            "answer_format": detect_text_format(answer),
+        }
         if answer != content.strip():
             response_json["sanitized"] = True
         return answer, request_json, response_json
