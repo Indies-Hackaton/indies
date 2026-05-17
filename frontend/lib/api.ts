@@ -3,6 +3,8 @@ import type {
   ConversationDetailResponse,
   ConversationListItem,
   ConversationOut,
+  FeedbackRating,
+  MessageOut,
 } from "./types";
 
 export class ApiError extends Error {
@@ -93,5 +95,15 @@ export function renameConversation(
 export function deleteConversation(conversationId: string): Promise<void> {
   return request<void>(`/api/v1/chat/conversations/${conversationId}`, {
     method: "DELETE",
+  });
+}
+
+export function submitMessageFeedback(
+  messageId: string,
+  feedbackRating: FeedbackRating | null,
+): Promise<MessageOut> {
+  return request<MessageOut>(`/api/v1/chat/messages/${messageId}/feedback`, {
+    method: "PATCH",
+    body: JSON.stringify({ feedback_rating: feedbackRating }),
   });
 }

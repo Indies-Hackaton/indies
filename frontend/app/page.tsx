@@ -195,6 +195,7 @@ export default function Home() {
               }
               return Promise.resolve();
             }}
+            onFeedback={conversation.updateTurnFeedback}
           />
         </div>
 

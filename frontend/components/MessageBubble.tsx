@@ -12,7 +12,8 @@ import React, {
 } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ChatTurn } from "@/lib/types";
+import { submitMessageFeedback } from "@/lib/api";
+import type { ChatTurn, FeedbackRating } from "@/lib/types";
 import { BrandLogo } from "./BrandLogo";
 import { SourcesSection } from "./SourcesSection";
 import styles from "./MessageBubble.module.css";
@@ -166,11 +167,85 @@ function TypingIndicator() {
   );
 }
 
-interface MessageBubbleProps {
-  turn: ChatTurn;
+// ── Feedback buttons ──────────────────────────────────────────────
+
+function ThumbUpIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true">
+      <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z" />
+      <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+    </svg>
+  );
 }
 
-export function MessageBubble({ turn }: MessageBubbleProps) {
+function ThumbDownIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true">
+      <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z" />
+      <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
+    </svg>
+  );
+}
+
+interface FeedbackButtonsProps {
+  messageId: string;
+  currentRating: FeedbackRating | null;
+  onRate: (rating: FeedbackRating | null) => void;
+}
+
+function FeedbackButtons({ messageId, currentRating, onRate }: FeedbackButtonsProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleClick(rating: FeedbackRating) {
+    if (isSubmitting) return;
+    const next = currentRating === rating ? null : rating;
+    setIsSubmitting(true);
+    try {
+      await submitMessageFeedback(messageId, next);
+      onRate(next);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className={styles.feedback}>
+      <button
+        className={`${styles.feedbackBtn} ${currentRating === "like" ? styles.feedbackBtnActive : ""}`}
+        type="button"
+        onClick={() => handleClick("like")}
+        disabled={isSubmitting}
+        aria-pressed={currentRating === "like"}
+      >
+        <ThumbUpIcon />
+        Útil
+      </button>
+      <button
+        className={`${styles.feedbackBtn} ${currentRating === "dislike" ? styles.feedbackBtnActive : ""}`}
+        type="button"
+        onClick={() => handleClick("dislike")}
+        disabled={isSubmitting}
+        aria-pressed={currentRating === "dislike"}
+      >
+        <ThumbDownIcon />
+        No útil
+      </button>
+    </div>
+  );
+}
+
+// ── Component ─────────────────────────────────────────────────────
+
+interface MessageBubbleProps {
+  turn: ChatTurn;
+  onFeedback: (turnId: string, rating: FeedbackRating | null) => void;
+}
+
+export function MessageBubble({ turn, onFeedback }: MessageBubbleProps) {
   const { question, assistantMessage, status, error } = turn;
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
 
@@ -208,6 +283,14 @@ export function MessageBubble({ turn }: MessageBubbleProps) {
               handleMarkerClick,
             )}
           </div>
+
+          {status === "success" && assistantMessage && (
+            <FeedbackButtons
+              messageId={assistantMessage.id}
+              currentRating={assistantMessage.feedback_rating}
+              onRate={(rating) => onFeedback(turn.id, rating)}
+            />
+          )}
 
           {status === "success" && turn.toolRuns.length > 0 && (
             <SourcesSection
