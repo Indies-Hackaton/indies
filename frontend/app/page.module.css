@@ -113,7 +113,8 @@
 }
 
 .sidebarOpen  { width: 260px; }
-.sidebarClosed { width: 44px; }
+/* 52px gives icon buttons (44px) 4px margin on each side — proper breathing room */
+.sidebarClosed { width: 52px; }
 
 /* ── Chat column ─────────────────────────────────────────────────── */
 .chatCol {

@@ -3,9 +3,9 @@
   flex-direction: column;
   align-items: stretch;
   gap: 20px;
-  padding: 48px 0 64px;
   width: 100%;
-  max-width: var(--content-max);
+  /* 2F: constrain width — chips shouldn't stretch wall-to-wall */
+  max-width: min(640px, 100%);
   margin: 0 auto;
   text-align: center;
 }
@@ -13,10 +13,10 @@
 .label {
   font-family: var(--font-display);
   font-size: 0.75rem;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--muted-light);
+  color: var(--fg-subtle);
 }
 
 .list {
@@ -33,43 +33,47 @@
   align-items: center;
   gap: 12px;
   text-align: left;
-  background: var(--white);
+  background: var(--bg);
   border: var(--border);
+  /* consistent radius */
   border-radius: var(--radius-lg);
   padding: 12px 18px;
   font-family: var(--font-body);
   font-size: 0.88rem;
-  color: var(--black);
-  transition: background 0.12s, color 0.12s, transform 0.1s, box-shadow 0.1s;
+  color: var(--fg);
+  /* 2G: hover lift */
+  transition: background var(--transition-fast), color var(--transition-fast),
+    transform var(--transition-fast), box-shadow var(--transition-fast);
   box-shadow: var(--shadow-brutal-sm);
 }
 
 .chip:hover {
   background: var(--black);
   color: var(--white);
-  transform: translate(-1px, -1px);
+  transform: translate(-2px, -2px);
   box-shadow: var(--shadow-brutal);
+}
+
+.chip:active {
+  transform: translate(0, 0);
+  box-shadow: var(--shadow-brutal-xs);
 }
 
 .chip:hover .arrow {
   color: var(--red);
 }
 
-@media (max-width: 767px) {
-  .wrapper {
-    padding: 32px 0 48px;
-  }
-
-  .chip {
-    font-size: 0.85rem;
-    padding: 10px 14px;
-  }
-}
-
 .arrow {
   flex-shrink: 0;
   font-family: var(--font-display);
   font-weight: 900;
-  color: var(--muted-light);
-  transition: color 0.12s;
+  color: var(--fg-subtle);
+  transition: color var(--transition-fast);
+}
+
+@media (max-width: 767px) {
+  .chip {
+    font-size: 0.85rem;
+    padding: 10px 14px;
+  }
 }

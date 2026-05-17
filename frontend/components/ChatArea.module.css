@@ -87,7 +87,7 @@
 
 .titleActionBtnDanger:hover:not(:disabled) {
   color: var(--red);
-  background: #fff1f1;
+  background: var(--surface-alt);
 }
 
 /* ── Thread (solo mensajes hacen scroll) ─────────────────────────── */
@@ -95,8 +95,20 @@
   flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
+  scrollbar-color: var(--border-color-subtle) transparent;
   background: transparent;
+  /* 2F: center the empty state vertically */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Empty state fills the thread and centers content */
+.threadEmpty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px var(--content-gutter);
 }
 
 /* ── Messages ────────────────────────────────────────────────────── */

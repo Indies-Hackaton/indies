@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VigIA — Assistant Anchor Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --black: #000000;
+    --white: #ffffff;
+    --red: #dc2626;
+    --fg: #000000;
+    --fg-muted: #555555;
+    --fg-subtle: #888888;
+    --bg: #ffffff;
+    --surface: #fafafa;
+    --border: 2px solid #000000;
+    --border-thin: 1px solid #e5e5e5;
+    --shadow-brutal: 4px 4px 0px 0px #000000;
+    --shadow-brutal-sm: 3px 3px 0px 0px #000000;
+    --shadow-brutal-xs: 2px 2px 0px 0px #000000;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    --font: system-ui, -apple-system, sans-serif;
+    --font-mono: ui-monospace, monospace;
+  }
+
+  body {
+    background: #f0ede8;
+    font-family: var(--font);
+    padding: 40px 24px 60px;
+    color: var(--fg);
+  }
+
+  .page-label {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 36px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .col-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 10px;
+  }
+
+  /* ── Chat panel shell ── */
+  .panel {
+    background: var(--white);
+    border: var(--border);
+    box-shadow: var(--shadow-brutal);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-header {
+    padding: 10px 16px;
+    border-bottom: var(--border);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--white);
+  }
+
+  .panel-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+  }
+
+  .panel-body {
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── User bubble ── */
+  .user-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+    gap: 10px;
+  }
+
+  .user-bubble {
+    background: var(--black);
+    color: var(--white);
+    padding: 10px 14px;
+    border: var(--border);
+    border-radius: var(--radius-xl) var(--radius-xl) var(--radius-sm) var(--radius-xl);
+    box-shadow: var(--shadow-brutal-sm);
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 72%;
+  }
+
+  .user-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: var(--border);
+    background: linear-gradient(145deg, #f3f4f6, #9ca3af);
+    flex-shrink: 0;
+  }
+
+  /* ── Assistant row ── */
+  .assistant-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .assistant-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: var(--border);
+    background: var(--red);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    font-weight: 900;
+  }
+
+  .assistant-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .assistant-text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--fg);
+  }
+
+  .assistant-text strong {
+    font-weight: 700;
+  }
+
+  .sources-strip {
+    font-size: 10px;
+    color: var(--fg-subtle);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: var(--border-thin);
+    padding: 5px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: var(--radius-sm);
+    align-self: flex-start;
+  }
+
+  .sources-dot { color: var(--red); }
+
+  /* ══ Option 1 — Full card ══════════════════════════════════════ */
+  .opt1 .assistant-body {
+    border: var(--border);
+    box-shadow: var(--shadow-brutal-sm);
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+  }
+
+  /* ══ Option 2 — Left stripe + card ════════════════════════════ */
+  .opt2 .assistant-body {
+    border: var(--border);
+    border-left: 6px solid var(--red);
+    box-shadow: var(--shadow-brutal-sm);
+    background: var(--bg);
+    padding: 12px 14px;
+  }
+
+  /* ══ Option 3 — Left stripe + shadow ══════════════════════════ */
+  .opt3 .assistant-body {
+    border-left: 3px solid var(--red);
+    box-shadow: var(--shadow-brutal-xs);
+    background: transparent;
+    padding: 4px 4px 4px 14px;
+  }
+
+  /* ══ Option 4 — Shadow only ════════════════════════════════════ */
+  .opt4 .assistant-body {
+    box-shadow: var(--shadow-brutal-sm);
+    background: transparent;
+    padding: 4px 8px;
+  }
+
+  @media (max-width: 700px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<p class="page-label">VigIA — Assistant Anchor · 4 options</p>
+
+<div class="grid">
+
+  <!-- ── Option 1: Full card ── -->
+  <div>
+    <div class="col-label">① Full card (Maximum Brutal)</div>
+    <div class="panel opt1">
+      <div class="panel-header">
+        <span class="panel-dot"></span>
+        Análisis completo licitación ID 2770-136-LR25
+      </div>
+      <div class="panel-body">
+
+        <div class="user-row">
+          <div class="user-bubble">
+            ¿Cuántos oferentes participaron y quién ganó?
+          </div>
+          <div class="user-avatar"></div>
+        </div>
+
+        <div class="assistant-row">
+          <div class="assistant-avatar">V</div>
+          <div class="assistant-content">
+            <div class="assistant-body">
+              <p class="assistant-text">
+                Participaron <strong>3 oferentes</strong> en la licitación. El ganador fue
+                <strong>Constructora Norte S.A.</strong> con un monto adjudicado de
+                $5.863.643.379 CLP, que resultó inferior al estimado inicial, lo cual
+                es una señal favorable en cuanto a eficiencia en la contratación.
+              </p>
+            </div>
+            <div class="sources-strip">
+              <span class="sources-dot">▾</span>
+              Fuentes · 1 fuente · 1 registro
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Option 2: Left stripe + card ── -->
+  <div>
+    <div class="col-label">② Left stripe + card (Balanced Brutal)</div>
+    <div class="panel opt2">
+      <div class="panel-header">
+        <span class="panel-dot"></span>
+        Análisis completo licitación ID 2770-136-LR25
+      </div>
+      <div class="panel-body">
+
+        <div class="user-row">
+          <div class="user-bubble">
+            ¿Cuántos oferentes participaron y quién ganó?
+          </div>
+          <div class="user-avatar"></div>
+        </div>
+
+        <div class="assistant-row">
+          <div class="assistant-avatar">V</div>
+          <div class="assistant-content">
+            <div class="assistant-body">
+              <p class="assistant-text">
+                Participaron <strong>3 oferentes</strong> en la licitación. El ganador fue
+                <strong>Constructora Norte S.A.</strong> con un monto adjudicado de
+                $5.863.643.379 CLP, que resultó inferior al estimado inicial, lo cual
+                es una señal favorable en cuanto a eficiencia en la contratación.
+              </p>
+            </div>
+            <div class="sources-strip">
+              <span class="sources-dot">▾</span>
+              Fuentes · 1 fuente · 1 registro
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Option 3: Left stripe + shadow ── -->
+  <div>
+    <div class="col-label">③ Left stripe + shadow (Soft Brutal) — current</div>
+    <div class="panel opt3">
+      <div class="panel-header">
+        <span class="panel-dot"></span>
+        Análisis completo licitación ID 2770-136-LR25
+      </div>
+      <div class="panel-body">
+
+        <div class="user-row">
+          <div class="user-bubble">
+            ¿Cuántos oferentes participaron y quién ganó?
+          </div>
+          <div class="user-avatar"></div>
+        </div>
+
+        <div class="assistant-row">
+          <div class="assistant-avatar">V</div>
+          <div class="assistant-content">
+            <div class="assistant-body">
+              <p class="assistant-text">
+                Participaron <strong>3 oferentes</strong> en la licitación. El ganador fue
+                <strong>Constructora Norte S.A.</strong> con un monto adjudicado de
+                $5.863.643.379 CLP, que resultó inferior al estimado inicial, lo cual
+                es una señal favorable en cuanto a eficiencia en la contratación.
+              </p>
+            </div>
+            <div class="sources-strip">
+              <span class="sources-dot">▾</span>
+              Fuentes · 1 fuente · 1 registro
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Option 4: Shadow only ── -->
+  <div>
+    <div class="col-label">④ Shadow only (Barely Brutal)</div>
+    <div class="panel opt4">
+      <div class="panel-header">
+        <span class="panel-dot"></span>
+        Análisis completo licitación ID 2770-136-LR25
+      </div>
+      <div class="panel-body">
+
+        <div class="user-row">
+          <div class="user-bubble">
+            ¿Cuántos oferentes participaron y quién ganó?
+          </div>
+          <div class="user-avatar"></div>
+        </div>
+
+        <div class="assistant-row">
+          <div class="assistant-avatar">V</div>
+          <div class="assistant-content">
+            <div class="assistant-body">
+              <p class="assistant-text">
+                Participaron <strong>3 oferentes</strong> en la licitación. El ganador fue
+                <strong>Constructora Norte S.A.</strong> con un monto adjudicado de
+                $5.863.643.379 CLP, que resultó inferior al estimado inicial, lo cual
+                es una señal favorable en cuanto a eficiencia en la contratación.
+              </p>
+            </div>
+            <div class="sources-strip">
+              <span class="sources-dot">▾</span>
+              Fuentes · 1 fuente · 1 registro
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

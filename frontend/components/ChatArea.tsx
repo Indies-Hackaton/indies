@@ -156,7 +156,9 @@ export function ChatArea({
       {/* ── Message thread ── */}
       <div className={styles.thread}>
         {turns.length === 0 ? (
-          <ExampleChips onSelect={onSubmit} />
+          <div className={styles.threadEmpty}>
+            <ExampleChips onSelect={onSubmit} />
+          </div>
         ) : (
           <div className={styles.messages}>
             {turns.map((turn) => (

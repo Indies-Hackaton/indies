@@ -25,9 +25,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px 0;
-  border-bottom: var(--border-thin);
-  min-height: 52px;
+  padding: 4px 0;
 }
 
 .title {
@@ -43,28 +41,23 @@
 
 .toggleBtn {
   flex-shrink: 0;
-  color: var(--muted);
-  background: var(--white);
-  border: var(--border-thin);
-  width: 34px;
-  height: 34px;
+  color: var(--fg-muted);
+  background: none;
+  border: none;
+  /* 44×44px touch target — WCAG minimum */
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition:
-    color 0.15s,
-    background 0.15s,
-    border-color 0.15s,
-    box-shadow 0.15s;
+  transition: color var(--transition-fast), background var(--transition-fast);
   border-radius: var(--radius-sm);
 }
 
 .toggleBtn:hover {
-  color: var(--black);
-  background: var(--surface);
-  border-color: var(--black);
-  box-shadow: var(--shadow-brutal-sm);
+  color: var(--fg);
+  background: var(--surface-alt);
 }
 
 @media (max-width: 768px) {
@@ -130,33 +123,30 @@
 .collapsedNewWrap {
   flex-shrink: 0;
   display: flex;
-  justify-content: center;
-  padding: 12px 0;
-  border-bottom: var(--border-thin);
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
 }
 
 .collapsedNewBtn {
   color: var(--red);
-  background: var(--white);
-  border: var(--border);
+  background: none;
+  border: none;
   border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-brutal-sm);
-  width: 34px;
-  height: 34px;
+  box-shadow: none;
+  /* 44×44px — WCAG minimum touch target */
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    box-shadow 0.15s,
-    transform 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .collapsedNewBtn:hover {
-  background: var(--black);
-  color: var(--white);
+  background: var(--surface-alt);
+  color: var(--red);
   box-shadow: var(--shadow-brutal);
   transform: translate(-1px, -1px);
 }
@@ -243,19 +233,20 @@
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background var(--transition-fast);
 }
 
 .itemBtn:hover {
-  background: var(--surface);
+  background: var(--surface-alt);
 }
 
+/* Active item uses surface token — adapts correctly to dark mode */
 .itemWrapActive .itemBtn {
-  background: #fafafa;
+  background: var(--surface-alt);
 }
 
 .itemWrapActive .itemBtn:hover {
-  background: #f5f5f5;
+  background: var(--surface-alt);
 }
 
 .itemTitle {
@@ -366,7 +357,7 @@
 .dropdownItem:hover { background: var(--surface); }
 
 .dropdownItemDanger { color: var(--red); }
-.dropdownItemDanger:hover { background: #fef2f2; }
+.dropdownItemDanger:hover { background: var(--surface-alt); }
 
 /* ── Empty state ─────────────────────────────────────────────────── */
 .empty {
@@ -409,7 +400,7 @@
 .skeletonLine {
   height: 9px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, var(--surface-alt) 25%, var(--border-color-subtle) 50%, var(--surface-alt) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
 }

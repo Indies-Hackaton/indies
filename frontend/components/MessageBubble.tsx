@@ -248,9 +248,13 @@ interface MessageBubbleProps {
 export function MessageBubble({ turn, onFeedback }: MessageBubbleProps) {
   const { question, assistantMessage, status, error } = turn;
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
+  const [activeTick, setActiveTick] = useState(0);
 
   function handleMarkerClick(n: number) {
-    setActiveSourceIndex((prev) => (prev === n ? null : n));
+    // Always activate the clicked source (no toggle-off).
+    // Increment tick so repeated clicks on the same marker re-trigger scroll.
+    setActiveSourceIndex(n);
+    setActiveTick((t) => t + 1);
   }
 
   return (
@@ -298,6 +302,7 @@ export function MessageBubble({ turn, onFeedback }: MessageBubbleProps) {
               totalRecords={turn.totalRecords}
               messageId={turn.id}
               activeIndex={activeSourceIndex}
+              activeTick={activeTick}
             />
           )}
         </div>

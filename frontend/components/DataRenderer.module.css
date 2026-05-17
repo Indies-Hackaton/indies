@@ -38,8 +38,9 @@
   overflow: auto;
   max-height: clamp(280px, 52vh, 680px);
   border: var(--border);
-  border-radius: var(--radius-md);
-  background: var(--white);
+  /* Tables are always sharp-edged — no border-radius */
+  border-radius: 0;
+  background: var(--surface);
   -webkit-overflow-scrolling: touch;
   width: 100%;
   max-width: 100%;
@@ -75,7 +76,7 @@
   background: var(--black);
   padding: 10px 14px;
   white-space: nowrap;
-  border-right: 1px solid #333;
+  border-right: 1px solid var(--border-color-subtle);
 }
 
 .table th:last-child {
@@ -104,11 +105,11 @@
 }
 
 .table tbody tr:hover td {
-  background: #fff5f5;
+  background: var(--surface-alt);
 }
 
 .table tbody tr:hover td.cellSticky {
-  background: #fff0f0;
+  background: var(--surface-alt);
 }
 
 .cellWrap {
@@ -153,7 +154,7 @@
 }
 
 .table tbody tr:hover td.cellSticky {
-  background: #fff0f0;
+  background: var(--surface-alt);
 }
 
 .cellSource {
