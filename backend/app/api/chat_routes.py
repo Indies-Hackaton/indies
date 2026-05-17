@@ -168,6 +168,7 @@ async def update_message_feedback(
     mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
+    camara: CamaraService = Depends(get_camara_service),
 ) -> MessageOut:
     """Persist like/dislike feedback for any message in an active conversation."""
     async with sessionmaker() as session:
@@ -177,6 +178,7 @@ async def update_message_feedback(
             mercado_publico=mercado_publico,
             senado=senado,
             contraloria=contraloria,
+            camara=camara,
         )
         try:
             return await service.update_message_feedback(
@@ -262,6 +264,7 @@ async def rename_conversation(
     mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
+    camara: CamaraService = Depends(get_camara_service),
 ) -> ConversationOut:
     """Rename an active conversation."""
     async with sessionmaker() as session:
@@ -271,6 +274,7 @@ async def rename_conversation(
             mercado_publico=mercado_publico,
             senado=senado,
             contraloria=contraloria,
+            camara=camara,
         )
         try:
             return await service.rename_conversation(conversation_id, payload.title)
@@ -294,6 +298,7 @@ async def update_conversation_feedback(
     mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
+    camara: CamaraService = Depends(get_camara_service),
 ) -> ConversationOut:
     """Persist like/dislike and optional free-form feedback for a conversation."""
     fields_set = payload.model_fields_set
@@ -310,6 +315,7 @@ async def update_conversation_feedback(
             mercado_publico=mercado_publico,
             senado=senado,
             contraloria=contraloria,
+            camara=camara,
         )
         try:
             return await service.update_conversation_feedback(
@@ -339,6 +345,7 @@ async def delete_conversation(
     mercado_publico: MercadoPublicoClient = Depends(get_mercado_publico_client),
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
+    camara: CamaraService = Depends(get_camara_service),
 ) -> Response:
     """Soft-delete an active conversation while preserving messages and traces."""
     async with sessionmaker() as session:
@@ -348,6 +355,7 @@ async def delete_conversation(
             mercado_publico=mercado_publico,
             senado=senado,
             contraloria=contraloria,
+            camara=camara,
         )
         try:
             await service.delete_conversation(conversation_id)

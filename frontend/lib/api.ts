@@ -44,6 +44,9 @@ async function request<T>(
     throw new ApiError(detail, res.status);
   }
 
+  // 204 No Content — return undefined cast to T (caller must type as void).
+  if (res.status === 204) return undefined as T;
+
   return res.json() as Promise<T>;
 }
 
