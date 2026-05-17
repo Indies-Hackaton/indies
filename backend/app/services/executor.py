@@ -205,7 +205,7 @@ class Executor:
 
         # ── Contraloría ──────────────────────────────────────────────────
         if tool == "contraloria_search":
-            records, metadata = self._contraloria.search(
+            records, metadata = await self._contraloria.search(
                 entity_name=p.get("entity_name"),
                 year_min=int(p["year_min"]) if p.get("year_min") is not None else None,
                 year_max=int(p["year_max"]) if p.get("year_max") is not None else None,

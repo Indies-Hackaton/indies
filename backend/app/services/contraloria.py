@@ -1,71 +1,66 @@
-"""In-process CSV store for Contraloría General de la República de Chile data.
+"""PostgreSQL client for Contraloría General de la República de Chile data.
 
-Loads two semicolon-delimited, Latin-1 encoded CSV files at startup and
-exposes a synchronous ``search`` method that applies structured filters using
-pandas boolean masks. Accent-insensitive matching reuses ``normalize_text``
-from :mod:`app.core.text`.
+Connects to a Neon PostgreSQL database containing two tables loaded from the
+Contraloría CSV exports:
 
-Files expected at the paths passed to :class:`ContraloriaService.__init__`:
-  - Municipalidades_Contraloria.csv  (municipal audits, 2020–2024, ~36 k rows)
-  - No_Municipales_Contraloria.csv   (non-municipal entities, 2020–2025, ~35 k rows)
+  municipalidades     — municipal audits, 2020–2024
+  no_municipalidades  — non-municipal entity audits, 2020–2025
 
-Both files share an identical 23-column schema; key columns used for filtering:
+Both tables share an identical schema (23 snake_case columns). Filtering is
+done with parameterised SQL — no raw user input is interpolated.
 
-  Entidad                   — institution name
-  Región                    — Chilean region
-  Año informe publicado     — integer publication year
-  Tipo Fiscalizacion        — e.g. AUDITORIA, INSPECCION_OBRA_PUBLICA
-  Materia Fiscalizacion     — subject matter (text)
-  Nombre Fiscalizacion      — audit title (text)
-  Objetivo Fiscalizacion    — audit scope/objective (long text)
-  Titulo Observacion        — finding title (text)
-  Complejidad Observacion   — COMPLEJA | MEDIANAMENTE COMPLEJA | LEVEMENTE COMPLEJA
-  Link informe publicado    — URL to the published report
-  Sector                    — MUNICIPALIDADES | SERVICIOS PUBLICOS | …
+Accent-insensitive matching is handled by normalising the search term in
+Python (via :func:`~app.core.text.normalize_text`) and using PostgreSQL
+``ILIKE`` against the stored values, which are already uppercase in the source
+data.
 """
 
 from typing import Any
 
-import pandas as pd
+import asyncpg
 
 from app.core.text import normalize_text
-
-# Columns searched when keyword filtering is applied.
-_KEYWORD_COLS = [
-    "Materia Fiscalizacion",
-    "Nombre Fiscalizacion",
-    "Objetivo Fiscalizacion",
-    "Titulo Observacion",
-]
 
 _DEFAULT_LIMIT = 50
 _MAX_LIMIT = 200
 
+_KEYWORD_COLS = [
+    "materia_fiscalizacion",
+    "nombre_fiscalizacion",
+    "objetivo_fiscalizacion",
+    "titulo_observacion",
+]
+
 
 class ContraloriaError(RuntimeError):
-    """Raised when data files are missing or a filter parameter is invalid."""
+    """Raised when a DB call fails or a parameter is invalid."""
 
 
 class ContraloriaService:
-    """Loads Contraloría CSV data at init and serves filtered search results.
+    """Async PostgreSQL client for Contraloría audit data.
 
-    Parameters
-    ----------
-    municipalidades_path:
-        Absolute or relative path to ``Municipalidades_Contraloria.csv``.
-    no_municipales_path:
-        Absolute or relative path to ``No_Municipales_Contraloria.csv``.
+    Instantiate via :meth:`create`; the constructor is internal.
     """
 
-    def __init__(self, municipalidades_path: str, no_municipales_path: str) -> None:
-        self._muni = self._load(municipalidades_path)
-        self._no_muni = self._load(no_municipales_path)
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
 
-    # ------------------------------------------------------------------
-    # Public
-    # ------------------------------------------------------------------
+    @classmethod
+    async def create(cls, database_url: str) -> "ContraloriaService":
+        """Open a connection pool and return a ready service instance."""
+        pool = await asyncpg.create_pool(
+            database_url,
+            min_size=1,
+            max_size=5,
+            ssl="require",
+        )
+        return cls(pool)
 
-    def search(
+    async def close(self) -> None:
+        """Close the connection pool (called during app shutdown)."""
+        await self._pool.close()
+
+    async def search(
         self,
         *,
         entity_name: str | None = None,
@@ -78,76 +73,45 @@ class ContraloriaService:
         source: str = "both",
         limit: int = _DEFAULT_LIMIT,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        """Filter Contraloría records and return (records, metadata).
+        """Query Contraloría records with structured filters.
 
-        All string comparisons are accent- and case-insensitive via
-        :func:`~app.core.text.normalize_text`.
-
-        Parameters
-        ----------
-        entity_name:
-            Substring to match against the ``Entidad`` column.
-        year_min / year_max:
-            Inclusive bounds on ``Año informe publicado``.
-        region:
-            Substring to match against ``Región``.
-        tipo_fiscalizacion:
-            Substring to match against ``Tipo Fiscalizacion``.
-        complejidad:
-            Substring to match against ``Complejidad Observacion``.
-        keywords:
-            Terms searched across subject/objective/finding text columns.
-        source:
-            ``"municipalidades"`` | ``"no_municipales"`` | ``"both"``.
-        limit:
-            Maximum rows returned (capped at ``_MAX_LIMIT``).
+        Returns ``(records, metadata)`` where *records* is a list of dicts and
+        *metadata* contains ``total_before_limit``, ``returned``, ``limit``,
+        ``source``, and ``filters_applied``.
         """
-        df = self._select_source(source)
-
-        if entity_name:
-            key = normalize_text(entity_name)
-            mask = df["_entidad_norm"].str.contains(key, regex=False, na=False)
-            df = df[mask]
-
-        if year_min is not None:
-            df = df[df["Año informe publicado"] >= year_min]
-
-        if year_max is not None:
-            df = df[df["Año informe publicado"] <= year_max]
-
-        if region:
-            key = normalize_text(region)
-            mask = df["_region_norm"].str.contains(key, regex=False, na=False)
-            df = df[mask]
-
-        if tipo_fiscalizacion:
-            key = normalize_text(tipo_fiscalizacion)
-            mask = df["_tipo_norm"].str.contains(key, regex=False, na=False)
-            df = df[mask]
-
-        if complejidad:
-            key = normalize_text(complejidad)
-            mask = df["_complejidad_norm"].str.contains(key, regex=False, na=False)
-            df = df[mask]
-
-        if keywords:
-            terms = [normalize_text(k) for k in keywords if k]
-            if terms:
-                combined = df[[c for c in _KEYWORD_COLS if c in df.columns]].fillna("").agg(
-                    lambda row: " ".join(normalize_text(str(v)) for v in row), axis=1
-                )
-                keyword_mask = combined.apply(
-                    lambda text: any(t in text for t in terms)
-                )
-                df = df[keyword_mask]
-
-        total_before_limit = len(df)
+        tables = _resolve_tables(source)
         effective_limit = min(int(limit) if limit else _DEFAULT_LIMIT, _MAX_LIMIT)
-        df = df.head(effective_limit)
 
-        # Drop internal normalisation columns before returning.
-        output_cols = [c for c in df.columns if not c.startswith("_")]
-        records = df[output_cols].to_dict(orient="records")
+        all_records: list[dict[str, Any]] = []
+        total_before_limit = 0
+
+        async with self._pool.acquire() as conn:
+            for table in tables:
+                where, params = _build_where(
+                    entity_name=entity_name,
+                    year_min=year_min,
+                    year_max=year_max,
+                    region=region,
+                    tipo_fiscalizacion=tipo_fiscalizacion,
+                    complejidad=complejidad,
+                    keywords=keywords or [],
+                )
+
+                count_sql = f"SELECT COUNT(*) FROM {table}"
+                if where:
+                    count_sql += f" WHERE {where}"
+                count_row = await conn.fetchrow(count_sql, *params)
+                total_before_limit += count_row[0]
+
+                fetch_sql = f"SELECT * FROM {table}"
+                if where:
+                    fetch_sql += f" WHERE {where}"
+                fetch_sql += f" LIMIT ${len(params) + 1}"
+                rows = await conn.fetch(fetch_sql, *params, effective_limit)
+                all_records.extend(dict(row) for row in rows)
+
+        # When querying both tables honour the overall limit across both.
+        records = all_records[:effective_limit]
 
         metadata: dict[str, Any] = {
             "total_before_limit": total_before_limit,
@@ -168,47 +132,64 @@ class ContraloriaService:
         }
         return records, metadata
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
-    @staticmethod
-    def _load(path: str) -> pd.DataFrame:
-        try:
-            df = pd.read_csv(
-                path,
-                sep=";",
-                encoding="latin-1",
-                dtype=str,
-                low_memory=False,
-            )
-        except FileNotFoundError:
-            raise ContraloriaError(f"Contraloría data file not found: {path!r}")
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-        # Coerce year column to nullable integer.
-        year_col = "Año informe publicado"
-        if year_col in df.columns:
-            df[year_col] = pd.to_numeric(df[year_col], errors="coerce")
+def _resolve_tables(source: str) -> list[str]:
+    if source == "municipalidades":
+        return ["municipalidades"]
+    if source == "no_municipales":
+        return ["no_municipalidades"]
+    if source == "both":
+        return ["municipalidades", "no_municipalidades"]
+    raise ContraloriaError(
+        f"Invalid source {source!r}. Must be 'municipalidades', 'no_municipales', or 'both'."
+    )
 
-        # Pre-compute normalised columns for fast filtering.
-        for raw_col, norm_col in (
-            ("Entidad", "_entidad_norm"),
-            ("Región", "_region_norm"),
-            ("Tipo Fiscalizacion", "_tipo_norm"),
-            ("Complejidad Observacion", "_complejidad_norm"),
-        ):
-            if raw_col in df.columns:
-                df[norm_col] = df[raw_col].fillna("").apply(normalize_text)
 
-        return df
+def _build_where(
+    *,
+    entity_name: str | None,
+    year_min: int | None,
+    year_max: int | None,
+    region: str | None,
+    tipo_fiscalizacion: str | None,
+    complejidad: str | None,
+    keywords: list[str],
+) -> tuple[str, list[Any]]:
+    """Return a SQL WHERE clause (no leading WHERE) and its parameter list."""
+    clauses: list[str] = []
+    params: list[Any] = []
 
-    def _select_source(self, source: str) -> pd.DataFrame:
-        if source == "municipalidades":
-            return self._muni.copy()
-        if source == "no_municipales":
-            return self._no_muni.copy()
-        if source == "both":
-            return pd.concat([self._muni, self._no_muni], ignore_index=True)
-        raise ContraloriaError(
-            f"Invalid source {source!r}. Must be 'municipalidades', 'no_municipales', or 'both'."
-        )
+    def _add(col: str, value: str) -> None:
+        params.append(f"%{normalize_text(value)}%")
+        clauses.append(f"UPPER(unaccent({col})) ILIKE UPPER(unaccent(${len(params)}))")
+
+    if entity_name:
+        _add("entidad", entity_name)
+    if region:
+        _add("region", region)
+    if tipo_fiscalizacion:
+        _add("tipo_fiscalizacion", tipo_fiscalizacion)
+    if complejidad:
+        _add("complejidad_observacion", complejidad)
+
+    if year_min is not None:
+        params.append(year_min)
+        clauses.append(f"anio_informe >= ${len(params)}")
+    if year_max is not None:
+        params.append(year_max)
+        clauses.append(f"anio_informe <= ${len(params)}")
+
+    if keywords:
+        terms = [normalize_text(k) for k in keywords if k]
+        for term in terms:
+            keyword_parts = []
+            for col in _KEYWORD_COLS:
+                params.append(f"%{term}%")
+                keyword_parts.append(f"UPPER(unaccent({col})) ILIKE UPPER(unaccent(${len(params)}))")
+            clauses.append(f"({' OR '.join(keyword_parts)})")
+
+    return (" AND ".join(clauses), params)
