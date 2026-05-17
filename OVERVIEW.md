@@ -267,12 +267,44 @@ Local CSV store for Contraloría General de la República audit data. Loaded onc
 
 ## Frontend (`/frontend`)
 
-**Stack:** Next.js (App Router) · TypeScript · vanilla CSS modules
+**Stack:** Next.js (App Router) · TypeScript · CSS Modules · `react-markdown`
 
 - `NEXT_PUBLIC_API_URL` points to the backend, defaulting to `http://localhost:8000`.
-- The current frontend is unchanged and still uses the older `/api/v1/audit/query` contract.
-- The persistent chat API is backend-only for now and should be tested with `curl` or another API client.
-- A later frontend pass can adopt `/api/v1/chat/messages`, store the active `conversation_id`, and render assistant messages plus linked traces.
+- The frontend uses `POST /api/v1/chat/messages` and the conversation endpoints exclusively. The old `/api/v1/audit/query` endpoint is not used by the UI.
+
+### Layout
+
+Three-column layout (sidebar · chat · nothing) that collapses to a mobile drawer on small screens.
+
+| Zone | Description |
+|---|---|
+| Sidebar | Conversation list grouped by time (Hoy / Ayer / 7 días / 30 días / Anterior). Collapsible. New conversation button, ⋯ hover menu per item for rename/delete. |
+| Chat area | Message thread + sticky input at bottom. Conversation title bar with inline rename (pencil) and delete (trash) actions. |
+
+### Evidence trail — "Show the receipts"
+
+Every assistant message includes a collapsible **FUENTES** section below the bubble. Expanded by default. Each source row is its own accordion showing the exact API call parameters and the full data table. Citation markers `[N]` in the synthesis text are rendered as clickable superscript buttons that auto-expand and scroll to the corresponding source row.
+
+### Markdown rendering
+
+`assistant_message.content_format` drives rendering: `"markdown"` → `react-markdown` with custom `[N]` marker injection; `"plain_text"` → plain paragraph.
+
+### Pending backend endpoints
+
+The following endpoints are designed and the frontend is fully wired, but the backend has not implemented them yet:
+
+| Method | Path | Notes |
+|---|---|---|
+| `PATCH` | `/api/v1/chat/conversations/{id}` | Rename — body: `{ "title": "..." }` |
+| `DELETE` | `/api/v1/chat/conversations/{id}` | Soft delete — sets `deleted_at` |
+
+The `ConversationRecord` table also needs a `deleted_at` nullable datetime column and all existing queries need a `WHERE deleted_at IS NULL` filter.
+
+### Environment
+
+| Variable | Default | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend base URL |
 
 ---
 

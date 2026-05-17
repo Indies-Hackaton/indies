@@ -1,143 +1,138 @@
-# Indies — Frontend Implementation Plan
+# Indies — Frontend Plan
 
-## Visual Direction: Bold Journalistic
+## Visual direction: Bold Journalistic
 
 **Fonts:** `Barlow Condensed` (headings, labels, badges) · `Libre Baskerville` (body, questions) · `IBM Plex Mono` (data, code, params)
-**Colors:** Pure white panels · Black borders · Red accent `#dc2626` · Pure black text
-**Approach:** CSS Modules (no Tailwind) — bespoke aesthetic, no utility-class fighting
+**Colors:** Pure white · Black borders (`2px solid #000`) · Red accent `#dc2626` · Pure black text
+**Approach:** CSS Modules — no Tailwind, bespoke aesthetic
 
 ---
 
 ## Core principle: "Show the receipts"
 
-Every query produces a numbered receipt card that exposes the full chain so users can verify it themselves:
+Indies is a transparency tool, not just a chatbot. Every assistant response exposes the full chain so users can verify it themselves:
 
-1. **Pregunta original** — verbatim user input
-2. **Interpretación del modelo** — intent badge, extracted params, LLM reasoning
-3. **Consulta enviada** — the literal API call made (endpoint + params)
-4. **Resultados** — smart renderer: table if shape is recognizable, formatted JSON fallback
+- What the agent planned to do
+- What API calls were made (with exact parameters)
+- What raw data came back
+- How the data was synthesized into the answer
 
 ---
 
-## Phase 1 — Core UI *(build now)*
+## Current state — what is built
 
-### What gets built
-- Header with logo + branding
-- Sticky search bar (black border, red submit `→`)
-- Example query chips shown when feed is empty
-- Results feed — numbered receipt cards with the 4-section chain above
-- Loading skeleton on each card while request is in-flight
-- Error and `unknown` intent states with actionable guidance
-- `lib/api.ts` — typed fetch wrapper matching backend Pydantic models
-- `lib/types.ts` — shared TypeScript types
-
-### Architectural decisions made in Phase 1 that unlock Phases 2 & 3
-
-| Decision | Phase 1 | Swapped in Phase 2/3 |
-|---|---|---|
-| `QueryEntry` type includes `id`, `timestamp`, `question`, `intent`, `rawData`, `status` | defined once, used everywhere | no change needed |
-| `useQueryHistory` hook exposes `{ entries, add, clear }` | backed by React `useState` (in-memory) | swap internals to localStorage, then to API |
-| `lib/api.ts` wraps all fetch calls | no auth headers | add `Authorization` header in one place |
-| Page structure uses Next.js App Router layout | anonymous, single route `/` | middleware slot + `/login`, `/history` routes already fit |
+### Interaction model
+Traditional chat: message thread oldest→newest, input pinned at bottom, conversation list in a collapsible sidebar.
 
 ### File structure
 
 ```
 frontend/
   app/
-    page.tsx              ← main page (replaces starter)
-    layout.tsx            ← updated metadata + fonts
-    globals.css           ← updated design tokens
+    page.tsx                  ← root layout: sidebar + chat
+    page.module.css
+    layout.tsx                ← metadata + fonts
+    globals.css               ← design tokens, base reset
   components/
-    SearchBar.tsx
-    SearchBar.module.css
-    ReceiptCard.tsx
-    ReceiptCard.module.css
-    DataRenderer.tsx      ← smart table / JSON fallback
-    ExampleChips.tsx
+    ChatArea.tsx              ← message thread + title bar + input
+    ChatArea.module.css
+    ChatInput.tsx             ← bottom chat input
+    ChatInput.module.css
+    MessageBubble.tsx         ← user + assistant bubbles, [N] marker parser
+    MessageBubble.module.css
+    SourcesSection.tsx        ← collapsible FUENTES + per-source accordions
+    SourcesSection.module.css
+    DataRenderer.tsx          ← smart table renderer with JSON fallback
+    DataRenderer.module.css
+    Sidebar.tsx               ← conversation list, time groups, ⋯ menu, inline rename
+    Sidebar.module.css
+    ExampleChips.tsx          ← suggestion chips shown on empty state
     ExampleChips.module.css
+    ConfirmDeleteModal.tsx    ← shared delete confirmation dialog
+    ConfirmDeleteModal.module.css
+    SearchBar.tsx             ← kept from original starter (unused in main UI)
+    SearchBar.module.css
   hooks/
-    useQueryHistory.ts    ← abstracted storage hook
+    useConversation.ts        ← active conversation state, send/load/rename/reset
+    useConversations.ts       ← sidebar conversation list with refresh
   lib/
-    api.ts                ← typed fetch wrapper
-    types.ts              ← QueryEntry, Intent, etc.
+    api.ts                    ← typed fetch wrapper for all backend calls
+    types.ts                  ← all shared TypeScript types
 ```
 
-### Implementation steps
+### Key components
 
-- [ ] Step 1 — `lib/types.ts`: define `QueryEntry`, `Intent`, `IntentParameters`, `QueryResponse`
-- [ ] Step 2 — `lib/api.ts`: typed fetch wrapper for `POST /api/v1/audit/query`
-- [ ] Step 3 — `hooks/useQueryHistory.ts`: in-memory history hook (`entries`, `add`, `clear`)
-- [ ] Step 4 — `app/globals.css` + `app/layout.tsx`: design tokens, fonts, base reset
-- [ ] Step 5 — `components/SearchBar`: sticky search input + submit button
-- [ ] Step 6 — `components/ExampleChips`: clickable suggestion chips (shown when feed is empty)
-- [ ] Step 7 — `components/DataRenderer`: smart table renderer with JSON fallback
-- [ ] Step 8 — `components/ReceiptCard`: full 4-section receipt card with loading + error states
-- [ ] Step 9 — `app/page.tsx`: wire everything together into the hybrid layout
+**`MessageBubble`**
+- User bubble (right-aligned, black background)
+- Assistant bubble (left-aligned, black border) with `react-markdown` when `content_format === "markdown"`
+- `[N]` citation markers rendered as clickable superscript buttons
+- `SourcesSection` below each assistant bubble
+
+**`SourcesSection`**
+- Collapsible header showing source count + total records (expanded by default)
+- Each tool run is a collapsible row: `[N] tool_name · X registros`
+- Expanded row shows exact API call parameters + `DataRenderer` table
+- `activeIndex` prop: forces the section open and auto-expands + highlights the target row when a `[N]` marker is clicked
+
+**`Sidebar`**
+- Conversations grouped by: Hoy / Ayer / Últimos 7 días / Últimos 30 días / Anterior
+- Desktop: collapses to a 44px icon strip via toggle (panel icon)
+- Mobile: full-width overlay triggered by hamburger in the main header
+- Per-item `⋯` hover menu → Renombrar (inline edit) / Eliminar (confirmation modal)
+
+**`ChatArea`**
+- Title bar with inline rename (pencil icon) and delete (trash icon)
+- Auto-scrolls to bottom on new message
 
 ---
 
-## Phase 2 — Persistence + Export *(next sprint)*
+## Pending — waiting on backend
 
-### What changes
-- `useQueryHistory` internals swapped from `useState` → `localStorage`
-- Zero changes to UI components (hook interface stays identical)
-- "Exportar" button on each receipt card: CSV (table data) + raw JSON (full `data` object)
-- "Limpiar historial" action in header
-- History survives page refresh and browser close
+### Rename + delete endpoints
 
-### Why it's easy
-Phase 1 already stores the full `rawData` object and timestamps every entry. Export is pure serialization, no new data fetching needed.
+Frontend fully built. Backend has not shipped these yet.
 
----
+| What | Backend needed |
+|---|---|
+| Rename | `PATCH /api/v1/chat/conversations/{id}` — body: `{ "title": "..." }` |
+| Soft delete | `DELETE /api/v1/chat/conversations/{id}` — sets `deleted_at = utc_now()` |
+| DB migration | `deleted_at TEXT DEFAULT NULL` column on `conversations` table |
+| Query filter | All `chat_service.py` queries must add `.where(ConversationRecord.deleted_at.is_(None))` |
 
-## Phase 3 — Auth + Cloud History *(later)*
+### Citation markers `[N]`
 
-### What changes
-- NextAuth (or similar) added — Next.js middleware protects routes
-- `useQueryHistory` internals swapped from `localStorage` → authenticated API calls
-- Still zero changes to UI components
-- Each `QueryEntry` gets a `userId` on the backend side
-
-### What the backend team needs to build
-- `POST /api/v1/history` — save a query entry (auth-gated)
-- `GET /api/v1/history` — retrieve user's history (auth-gated)
-- User model + session management
+Frontend fully wired. Backend needs to update `_CHAT_RESPONSE_PROMPT` to instruct the model to embed `[N]` markers in synthesis text, where `N` is the 1-based index of the `tool_run` in the results array.
 
 ---
 
-## Backend API reference (for frontend)
+## Pending — frontend work
 
-### `POST /api/v1/audit/query`
+### Export
 
-**Request**
-```json
-{ "message": "string" }
-```
+CSV/JSON export button on each source row in `SourcesSection`. Self-contained — no backend needed. The full `records` array is already in state.
 
-**Response**
-```json
-{
-  "intent": {
-    "tool": "orders_by_org_and_date | orders_by_date | unknown",
-    "parameters": {
-      "codigoorg": "string | null",
-      "fecha": "string | null"
-    },
-    "reasoning": "string | null"
-  },
-  "data": { },
-  "detail": "string | null"
-}
-```
+### Streaming responses
 
-**Error cases**
-- `502` — MiniMax or Mercado Público unreachable
-- `422` — required params missing (org or date not extractable)
+Needs analysis and a new backend SSE endpoint. When the backend streams tokens, the assistant bubble should show text appearing word-by-word instead of appearing all at once. Deferred until backend is ready.
 
-### Other endpoints
-- `GET /health` — liveness probe
-- `GET /api/hello` — legacy connectivity check
+### Markdown in synthesis prompt
 
-### Environment
-- `NEXT_PUBLIC_API_URL` — backend base URL (default: `http://localhost:8000`)
+Confirm with backend that `_CHAT_RESPONSE_PROMPT` explicitly requests markdown output so `content_format: "markdown"` is consistently returned and the UI always renders properly formatted responses.
+
+---
+
+## Phase roadmap
+
+### Phase 1 — Core UI ✅ Done
+Chat interface, evidence trail, sidebar, markdown rendering, citation marker wiring.
+
+### Phase 2 — Persistence + Export
+- History: **done by backend** — conversation DB replaces the original localStorage plan.
+- Rename/delete: frontend done, **waiting on backend endpoints**.
+- Export: **pending** — frontend only, no backend needed.
+
+### Phase 3 — Auth + Cloud History
+- NextAuth or similar — Next.js middleware protects routes.
+- `useConversation` API calls get `Authorization` header (one-line change in `lib/api.ts`).
+- Backend needs user model + auth middleware + user-scoped conversation queries.
+- No frontend component changes required if the hook interface stays the same.
