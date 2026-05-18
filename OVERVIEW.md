@@ -28,13 +28,14 @@
 
 ## Backend (`/backend`)
 
-**Stack:** Python · FastAPI · httpx · Pydantic v2 · pydantic-settings · SQLAlchemy async · Alembic · SQLite/aiosqlite · Postgres/asyncpg · uvicorn
+**Stack:** Python · FastAPI · httpx · Pydantic v2 · pydantic-settings · SQLAlchemy async · Alembic · SQLite/aiosqlite for local development · Postgres/asyncpg for production · uvicorn
 
 ### Entry point
 `backend/app/main.py`
 - Creates a shared `httpx.AsyncClient`.
 - Creates the async database engine and runs Alembic migrations to `head` at startup.
 - Mounts `MiniMaxClient`, `MercadoPublicoClient`, `SenadoClient`, `ContraloriaService`, and `db_sessionmaker` onto `app.state`.
+- Stores conversations, messages, LLM traces, and tool runs through `DATABASE_URL`. Local development can use SQLite; production/serverless deployments must use PostgreSQL because Vercel does not provide a persistent filesystem for SQLite.
 - Uses `CONTRALORIA_DATABASE_URL` (or a PostgreSQL `DATABASE_URL`) for Contraloría/Cámara lookup tables; when no PostgreSQL DSN is configured, those executor tools are disabled so local development still starts.
 - Enables CORS for origins in `FRONTEND_ORIGINS`.
 
@@ -49,8 +50,9 @@
 | `MINIMAX_CHAT_MODEL` | `MINIMAX_MODEL` | Optional user-facing conversational model |
 | `MERCADO_PUBLICO_TICKET` | — | Required Mercado Público ticket |
 | `MERCADO_PUBLICO_BASE_URL` | — | Required; example: `https://api.mercadopublico.cl/servicios/v1/publico` |
-| `FRONTEND_ORIGINS` | — | Required comma-separated CORS origins |
-| `DATABASE_URL` | `sqlite+aiosqlite:///./data/indies.db` | Optional async SQLAlchemy URL for conversation persistence |
+| `FRONTEND_ORIGINS` | — | Required comma-separated CORS origins. Production backend should include `https://indies-99li.vercel.app` |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./data/indies.db` | Required async SQLAlchemy URL for conversation persistence. SQLite is local-only; Vercel/serverless production must use `postgresql+asyncpg://<user>:<password>@<host>/<dbname>` |
+| `CLERK_JWKS_URL` | — | Optional Clerk JWKS URL for JWT verification. Production uses `https://real-firefly-25.clerk.accounts.dev/.well-known/jwks.json`; when omitted, auth is disabled and requests are anonymous |
 | `CONTRALORIA_DATABASE_URL` | — | Optional PostgreSQL/Neon URL for Contraloría and Cámara lookup tables; falls back to `DATABASE_URL` only when `DATABASE_URL` is PostgreSQL |
 
 ### API Routes
@@ -149,7 +151,8 @@ Response:
 ```
 
 Errors:
-- `404` when `conversation_id` does not exist or has been soft-deleted.
+- `404` when `conversation_id` does not exist, has been soft-deleted, or is
+  owned by a different authenticated user.
 - The endpoint generally persists failures as `assistant_message.status="failed"` when the Planner cannot produce a plan.
 
 Rendering marker:
@@ -216,8 +219,9 @@ Errors:
 
 ### `GET /api/v1/chat/conversations`
 
-Returns active, non-deleted conversations ordered by `updated_at` descending.
-Each item is a `ConversationListItem`:
+Requires authentication. Returns the current user's active, non-deleted
+conversations ordered by `updated_at` descending. Each item is a
+`ConversationListItem`:
 
 ```json
 {
@@ -234,11 +238,14 @@ Each item is a `ConversationListItem`:
 }
 ```
 
+Errors:
+- `401` when no valid Clerk bearer token is provided.
+
 ### `GET /api/v1/chat/conversations/{conversation_id}`
 
 Returns a full active, non-deleted conversation with `conversation`, `messages`,
 `llm_invocations`, and `tool_runs`. Returns `404` when the conversation does not
-exist or has `deleted_at` set.
+exist, has `deleted_at` set, or is owned by a different authenticated user.
 
 ### `PATCH /api/v1/chat/conversations/{conversation_id}`
 
@@ -253,7 +260,8 @@ Response: `ConversationOut` with the updated `title`, refreshed `updated_at`,
 and `deleted_at: null`.
 
 Errors:
-- `404` when the conversation does not exist or has been soft-deleted.
+- `404` when the conversation does not exist, has been soft-deleted, or is
+  owned by a different authenticated user.
 - `422` when `title` is empty or longer than 160 characters.
 
 ### `PATCH /api/v1/chat/conversations/{conversation_id}/feedback`
@@ -274,7 +282,8 @@ Response: `ConversationOut` with refreshed `feedback_rating`, `feedback_text`,
 and `feedback_updated_at`.
 
 Errors:
-- `404` when the conversation does not exist or has been soft-deleted.
+- `404` when the conversation does not exist, has been soft-deleted, or is
+  owned by a different authenticated user.
 - `422` when no feedback fields are provided, `feedback_rating` is not
   `"like"`, `"dislike"`, or `null`, or `feedback_text` is longer than 4000
   characters.
@@ -287,7 +296,8 @@ Messages, LLM invocations, and tool runs are preserved for audit/recovery.
 Response: `204 No Content`.
 
 Errors:
-- `404` when the conversation does not exist or has already been soft-deleted.
+- `404` when the conversation does not exist, has already been soft-deleted, or
+  is owned by a different authenticated user.
 
 ### `POST /api/v1/audit/query`
 
@@ -336,24 +346,33 @@ a transaction-scoped advisory lock so concurrent Vercel cold starts do not run
 the same migration at the same time. The first revision is idempotent so it can
 adopt existing SQLite/Postgres databases created before migrations; it creates
 missing chat tables, indexes, and `conversations.deleted_at`. The second
-revision adds persisted message and conversation feedback fields.
+revision adds persisted message and conversation feedback fields. The third
+revision adds nullable `conversations.user_id` ownership metadata and an index
+for authenticated conversation lists.
 
 | Table | Purpose |
 |---|---|
-| `conversations` | UUID conversation shell with generated/renamable title, timestamps, nullable `deleted_at` for soft delete, overall `feedback_rating`, optional `feedback_text`, and `feedback_updated_at` |
+| `conversations` | UUID conversation shell with generated/renamable title, timestamps, optional Clerk `user_id`, nullable `deleted_at` for soft delete, overall `feedback_rating`, optional `feedback_text`, and `feedback_updated_at` |
 | `messages` | User/assistant messages with status (`processing`, `completed`, `failed`), per-message `feedback_rating`, and `feedback_updated_at` |
 | `llm_invocations` | Title generation, Planner, and chat-response model calls; stores request/response JSON and error status. Public API responses redact internal `system` prompt contents from `request_json.messages`. |
 | `tool_runs` | One row per Planner task/API execution, linked to the assistant message and planner invocation |
 
-There is no auth yet; the conversation UUID is the access handle.
-Soft-deleted conversations are excluded from list/detail/continue/rename/delete
-operations, but their messages and trace rows remain in the database.
+When `CLERK_JWKS_URL` is configured, bearer JWTs are verified and new
+conversations store the Clerk subject in `conversations.user_id`; continuing,
+reading, renaming, giving feedback on, or deleting an owned conversation
+requires the same user. Anonymous conversations remain accessible by UUID.
+Conversation listing requires an authenticated user and returns only that
+user's active conversations. Soft-deleted conversations are excluded from
+list/detail/continue/rename/delete operations, but their messages and trace rows
+remain in the database.
 
 ### Services
 
 #### `ChatService` (`backend/app/services/chat_service.py`)
 - Creates/reuses conversations.
-- Lists and fetches only active conversations (`deleted_at IS NULL`).
+- Stores the authenticated Clerk subject on new conversations when present.
+- Lists and fetches only active conversations (`deleted_at IS NULL`) visible to
+  the current user.
 - Renames conversations by updating `title` and `updated_at`.
 - Stores or clears message-level like/dislike feedback.
 - Stores or clears conversation-level like/dislike feedback and optional text feedback.

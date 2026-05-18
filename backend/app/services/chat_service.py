@@ -377,7 +377,10 @@ class ChatService:
         user_id: str | None = None,
     ) -> ConversationRecord:
         if conversation_id:
-            return await self._get_active_conversation(conversation_id)
+            return await self._get_active_conversation(
+                conversation_id,
+                user_id=user_id,
+            )
 
         conversation = ConversationRecord(
             id=_new_id(),
