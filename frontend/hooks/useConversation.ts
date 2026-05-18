@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { getConversation, sendChatMessage } from "@/lib/api";
 import type {
   ChatPlannerOut,
@@ -30,9 +31,6 @@ function reconstructTurns(detail: ConversationDetailResponse): ChatTurn[] {
         )
       : [];
 
-    // Reconstruct the planner from the linked LLM invocation.
-    // response_json shape: { content: string, parsed: Plan, ... }
-    // The Plan lives at response_json.parsed, not at the root.
     const plannerInv = assistantMsg
       ? detail.llm_invocations.find(
           (inv) =>
@@ -53,7 +51,7 @@ function reconstructTurns(detail: ConversationDetailResponse): ChatTurn[] {
     const stableId = assistantMsg?.id ?? makeId();
     turns.push({
       id: stableId,
-      renderKey: stableId, // history turns: id and renderKey are the same
+      renderKey: stableId,
       question: msg.content,
       userMessage: msg,
       assistantMessage: assistantMsg,
@@ -76,6 +74,8 @@ interface ConversationState {
 }
 
 export function useConversation() {
+  const { getToken } = useAuth();
+
   const [state, setState] = useState<ConversationState>({
     conversationId: null,
     conversationTitle: null,
@@ -90,14 +90,13 @@ export function useConversation() {
     async (question: string) => {
       const tempId = makeId();
 
-      // Add optimistic turn immediately so the bubble appears at once.
       setState((prev) => ({
         ...prev,
         turns: [
           ...prev.turns,
           {
             id: tempId,
-            renderKey: tempId, // stable — never changes, prevents remount
+            renderKey: tempId,
             question,
             userMessage: null,
             assistantMessage: null,
@@ -111,7 +110,9 @@ export function useConversation() {
       }));
 
       try {
-        const response = await sendChatMessage(question, conversationId);
+        // Get token right before the request — Clerk's recommended pattern.
+        const token = await getToken();
+        const response = await sendChatMessage(question, conversationId, token);
 
         setState((prev) => ({
           conversationId: response.conversation.id,
@@ -121,7 +122,7 @@ export function useConversation() {
             t.id === tempId
               ? {
                   id: response.assistant_message.id,
-                  renderKey: tempId, // preserve the stable key
+                  renderKey: tempId,
                   question,
                   userMessage: response.user_message,
                   assistantMessage: response.assistant_message,
@@ -145,16 +146,14 @@ export function useConversation() {
         }));
       }
     },
-    // Recreate when conversationId changes so we never use a stale id.
-    [conversationId],
+    [conversationId, getToken],
   );
 
-  // Load a past conversation from the sidebar.
   const loadConversation = useCallback(async (id: string) => {
-    // Show skeleton instead of empty state while fetching.
     setState({ conversationId: id, conversationTitle: null, turns: [], isLoadingConversation: true });
     try {
-      const detail = await getConversation(id);
+      const token = await getToken();
+      const detail = await getConversation(id, token);
       setState({
         conversationId: id,
         conversationTitle: detail.conversation.title,
@@ -164,27 +163,19 @@ export function useConversation() {
     } catch {
       setState({ conversationId: null, conversationTitle: null, turns: [], isLoadingConversation: false });
     }
-  }, []);
+  }, [getToken]);
 
-  // Update the title in local state (called after a successful rename).
   const updateTitle = useCallback((newTitle: string) => {
     setState((prev) => ({ ...prev, conversationTitle: newTitle }));
   }, []);
 
-  // Patch the feedback rating on an assistant message in local state.
   const updateTurnFeedback = useCallback(
     (turnId: string, feedbackRating: FeedbackRating | null) => {
       setState((prev) => ({
         ...prev,
         turns: prev.turns.map((t) =>
           t.id === turnId && t.assistantMessage
-            ? {
-                ...t,
-                assistantMessage: {
-                  ...t.assistantMessage,
-                  feedback_rating: feedbackRating,
-                },
-              }
+            ? { ...t, assistantMessage: { ...t.assistantMessage, feedback_rating: feedbackRating } }
             : t,
         ),
       }));
@@ -192,7 +183,6 @@ export function useConversation() {
     [],
   );
 
-  // Start a fresh conversation.
   const reset = useCallback(() => {
     setState({ conversationId: null, conversationTitle: null, turns: [], isLoadingConversation: false });
   }, []);

@@ -48,6 +48,9 @@ class ConversationRecord(Base):
     feedback_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    user_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, default=None, index=True
+    )
 
     messages: Mapped[list["MessageRecord"]] = relationship(
         back_populates="conversation",

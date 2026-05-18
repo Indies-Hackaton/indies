@@ -9,6 +9,7 @@ import { ChatArea } from "@/components/ChatArea";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Sidebar } from "@/components/Sidebar";
+import { UserButton, useAuth, useUser } from "@clerk/nextjs";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import styles from "./page.module.css";
 
@@ -16,6 +17,8 @@ export default function Home() {
   const conversation = useConversation();
   const conversations = useConversations();
   const { theme, setTheme } = useTheme();
+  const { isSignedIn } = useUser();
+  const { getToken } = useAuth();
   /** Ancho de la columna (rail 44px ↔ panel 260px en desktop). */
   const [sidebarWide, setSidebarWide] = useState(true);
   /** Lista y textos del panel; en desktop aparece solo cuando el ancho terminó de abrir. */
@@ -95,7 +98,8 @@ export default function Home() {
   }
 
   async function handleRename(id: string, newTitle: string) {
-    await renameConversation(id, newTitle);
+    const token = await getToken();
+    await renameConversation(id, newTitle, token);
     if (id === conversation.conversationId) {
       conversation.updateTitle(newTitle);
     }
@@ -106,7 +110,8 @@ export default function Home() {
     if (!pendingDeleteId) return;
     setIsDeleting(true);
     try {
-      await deleteConversation(pendingDeleteId);
+      const token = await getToken();
+      await deleteConversation(pendingDeleteId, token);
       if (pendingDeleteId === conversation.conversationId) {
         conversation.reset();
       }
@@ -151,6 +156,15 @@ export default function Home() {
               year: "numeric",
             })}
           </span>
+          {isSignedIn && (
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: styles.clerkAvatar,
+                },
+              }}
+            />
+          )}
         </div>
       </header>
 

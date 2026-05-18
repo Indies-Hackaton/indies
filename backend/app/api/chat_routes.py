@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.auth import get_optional_user_id, require_user_id
 from app.services.chat_service import ChatNotFoundError, ChatService
 from app.services.camara import CamaraService
 from app.services.contraloria import ContraloriaService
@@ -132,6 +133,7 @@ async def send_chat_message(
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
     camara: CamaraService = Depends(get_camara_service),
+    user_id: str | None = Depends(get_optional_user_id),
 ) -> ChatMessageResponse:
     """Create or continue a conversation and return the assistant response."""
     async with sessionmaker() as session:
@@ -147,6 +149,7 @@ async def send_chat_message(
             return await service.handle_message(
                 conversation_id=payload.conversation_id,
                 message=payload.message,
+                user_id=user_id,
             )
         except ChatNotFoundError as exc:
             raise HTTPException(
@@ -204,8 +207,9 @@ async def list_conversations(
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
     camara: CamaraService = Depends(get_camara_service),
+    user_id: str = Depends(require_user_id),
 ) -> list[ConversationListItem]:
-    """Return conversation metadata ordered by recent activity."""
+    """Return conversation metadata for the authenticated user."""
     async with sessionmaker() as session:
         service = ChatService(
             session=session,
@@ -215,7 +219,7 @@ async def list_conversations(
             contraloria=contraloria,
             camara=camara,
         )
-        return await service.list_conversations()
+        return await service.list_conversations(user_id)
 
 
 @router.get(
@@ -231,6 +235,7 @@ async def get_conversation(
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
     camara: CamaraService = Depends(get_camara_service),
+    user_id: str | None = Depends(get_optional_user_id),
 ) -> ConversationDetailResponse:
     """Return a full conversation, including linked LLM and API traces."""
     async with sessionmaker() as session:
@@ -243,7 +248,7 @@ async def get_conversation(
             camara=camara,
         )
         try:
-            return await service.get_conversation(conversation_id)
+            return await service.get_conversation(conversation_id, user_id=user_id)
         except ChatNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -265,6 +270,7 @@ async def rename_conversation(
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
     camara: CamaraService = Depends(get_camara_service),
+    user_id: str | None = Depends(get_optional_user_id),
 ) -> ConversationOut:
     """Rename an active conversation."""
     async with sessionmaker() as session:
@@ -277,7 +283,7 @@ async def rename_conversation(
             camara=camara,
         )
         try:
-            return await service.rename_conversation(conversation_id, payload.title)
+            return await service.rename_conversation(conversation_id, payload.title, user_id=user_id)
         except ChatNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -299,6 +305,7 @@ async def update_conversation_feedback(
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
     camara: CamaraService = Depends(get_camara_service),
+    user_id: str | None = Depends(get_optional_user_id),
 ) -> ConversationOut:
     """Persist like/dislike and optional free-form feedback for a conversation."""
     fields_set = payload.model_fields_set
@@ -324,6 +331,7 @@ async def update_conversation_feedback(
                 feedback_text=payload.feedback_text,
                 update_rating="feedback_rating" in fields_set,
                 update_text="feedback_text" in fields_set,
+                user_id=user_id,
             )
         except ChatNotFoundError as exc:
             raise HTTPException(
@@ -346,6 +354,7 @@ async def delete_conversation(
     senado: SenadoClient = Depends(get_senado_client),
     contraloria: ContraloriaService = Depends(get_contraloria_service),
     camara: CamaraService = Depends(get_camara_service),
+    user_id: str | None = Depends(get_optional_user_id),
 ) -> Response:
     """Soft-delete an active conversation while preserving messages and traces."""
     async with sessionmaker() as session:
@@ -358,7 +367,7 @@ async def delete_conversation(
             camara=camara,
         )
         try:
-            await service.delete_conversation(conversation_id)
+            await service.delete_conversation(conversation_id, user_id=user_id)
         except ChatNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -96,6 +96,15 @@
   box-shadow: var(--shadow-brutal-sm);
 }
 
+/* Clerk UserButton avatar — size matches the header height */
+.clerkAvatar {
+  width: 30px;
+  height: 30px;
+  border: var(--border);
+  border-radius: 50%;
+  box-shadow: var(--shadow-brutal-xs);
+}
+
 /* ── Body ────────────────────────────────────────────────────────── */
 .body {
   flex: 1;

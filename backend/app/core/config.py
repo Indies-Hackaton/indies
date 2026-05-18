@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     # --- Persistence -------------------------------------------------------
     # SQLite is the default local store for conversations/messages/tool traces.
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/indies.db"
+
+    # --- Auth (Clerk) ------------------------------------------------------
+    # JWKS URL from your Clerk dashboard → API Keys → Advanced.
+    # Format: https://<your-clerk-domain>/.well-known/jwks.json
+    # When omitted, auth is disabled and all requests are treated as anonymous.
+    CLERK_JWKS_URL: str | None = None
     # Optional PostgreSQL/Neon URL for Contraloria and Camara lookup tables.
     # When omitted in local development, those executor tools are disabled
     # instead of blocking the whole FastAPI app from starting.

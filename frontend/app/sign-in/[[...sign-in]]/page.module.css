@@ -1,0 +1,50 @@
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 40px 24px;
+  background: var(--bg);
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.logo {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--fg);
+  line-height: 1;
+}
+
+.logoAccent {
+  color: var(--red);
+}
+
+.tagline {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.note {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  color: var(--fg-subtle);
+  text-align: center;
+  line-height: 1.6;
+  max-width: 340px;
+  margin: 0;
+}

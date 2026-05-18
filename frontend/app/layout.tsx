@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,13 +17,14 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" suppressHydrationWarning>
-      <head>
-        {/* Inline script — runs before first paint to set the correct theme
-            class without a flash of wrong theme (FOIT). Must be synchronous. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
+    <ClerkProvider>
+      <html lang="es" suppressHydrationWarning>
+        <head>
+          {/* Inline script — runs before first paint to set the correct theme
+              without a flash of wrong theme (FOIT). Must be synchronous. */}
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
 (function() {
   try {
     var stored = localStorage.getItem('theme');
@@ -31,11 +33,12 @@ export default function RootLayout({
     }
   } catch(e) {}
 })();
-            `.trim(),
-          }}
-        />
-      </head>
-      <body>{children}</body>
-    </html>
+              `.trim(),
+            }}
+          />
+        </head>
+        <body>{children}</body>
+      </html>
+    </ClerkProvider>
   );
 }
