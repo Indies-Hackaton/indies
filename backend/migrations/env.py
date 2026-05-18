@@ -1,4 +1,4 @@
-"""Alembic migration environment for the Indies backend."""
+"""Alembic migration environment for the VigIA backend."""
 
 from __future__ import annotations
 

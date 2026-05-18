@@ -483,7 +483,7 @@ user's first message.
 """
 
 _CHAT_RESPONSE_PROMPT = """\
-You are the user-facing conversational agent for Indies, a Chilean government \
+You are the user-facing conversational agent named VigIA, a Chilean government \
 transparency and anti-corruption audit assistant.
 
 You receive:

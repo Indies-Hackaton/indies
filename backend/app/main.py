@@ -1,4 +1,4 @@
-"""FastAPI application initialisation for the Indies audit API.
+"""FastAPI application initialisation for the VigIA audit API.
 
 This module wires together configuration, the shared async HTTP client, the
 service clients (MiniMax + Mercado Publico) and the API router.
@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await db_engine.dispose()
 
 
-app = FastAPI(title="Indies Audit API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="VigIA Audit API", version="0.2.0", lifespan=lifespan)
 
 # CORS must be configured before the app starts serving requests.
 app.add_middleware(
