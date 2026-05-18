@@ -14,6 +14,7 @@ import React, {
 } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useAuth } from "@clerk/nextjs";
 import { submitMessageFeedback } from "@/lib/api";
 import type { ChatTurn, FeedbackRating } from "@/lib/types";
 import { BrandLogo } from "./BrandLogo";
@@ -201,13 +202,15 @@ interface FeedbackButtonsProps {
 
 function FeedbackButtons({ messageId, currentRating, onRate }: FeedbackButtonsProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { getToken } = useAuth();
 
   async function handleClick(rating: FeedbackRating) {
     if (isSubmitting) return;
     const next = currentRating === rating ? null : rating;
     setIsSubmitting(true);
     try {
-      await submitMessageFeedback(messageId, next);
+      const token = await getToken();
+      await submitMessageFeedback(messageId, next, token);
       onRate(next);
     } finally {
       setIsSubmitting(false);

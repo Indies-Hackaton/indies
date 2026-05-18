@@ -12,3 +12,4 @@ asyncpg
 alembic
 
 curl-cffi
+PyJWT[crypto]

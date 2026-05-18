@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useUser } from "@clerk/nextjs";
+import Link from "next/link";
 import type { ConversationListItem } from "@/lib/types";
 import styles from "./Sidebar.module.css";
 
@@ -210,6 +212,92 @@ function ConvItem({ conv, isActive, onSelect, onRename, onDeleteRequest }: ConvI
   );
 }
 
+// ── Auth gate — shows history for signed-in users, sign-in prompt otherwise ──
+
+interface AuthGateProps {
+  conversations: ConversationListItem[];
+  groups: { label: string; items: ConversationListItem[] }[];
+  activeId: string | null;
+  isLoading: boolean;
+  onSelect: (id: string) => void;
+  onRename: (id: string, newTitle: string) => Promise<void>;
+  onDeleteRequest: (id: string) => void;
+}
+
+function AuthGate({
+  conversations, groups, activeId, isLoading,
+  onSelect, onRename, onDeleteRequest,
+}: AuthGateProps) {
+  const { isSignedIn, isLoaded } = useUser();
+
+  // Still loading Clerk session — show skeleton to avoid flash.
+  if (!isLoaded) {
+    return (
+      <div className={styles.skeletonList}>
+        {[68, 80, 55, 72, 60].map((w, i) => (
+          <div key={i} className={styles.skeletonItem}>
+            <div className={styles.skeletonLine} style={{ width: `${w}%` }} />
+            <div className={styles.skeletonLine} style={{ width: "30%" }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Anonymous user — show sign-in prompt.
+  if (!isSignedIn) {
+    return (
+      <div className={styles.signInPrompt}>
+        <p className={styles.signInText}>
+          Inicia sesión para guardar y acceder a tu historial de consultas.
+        </p>
+        <Link href="/sign-in" className={styles.signInBtn}>
+          Iniciar sesión
+        </Link>
+        <p className={styles.signInNote}>
+          Puedes consultar sin cuenta — tu historial no se guardará.
+        </p>
+      </div>
+    );
+  }
+
+  // Signed-in user — show conversation history.
+  return (
+    <>
+      {isLoading && conversations.length === 0 && (
+        <div className={styles.skeletonList}>
+          {[68, 80, 55, 72, 60].map((w, i) => (
+            <div key={i} className={styles.skeletonItem}>
+              <div className={styles.skeletonLine} style={{ width: `${w}%` }} />
+              <div className={styles.skeletonLine} style={{ width: "30%" }} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && conversations.length === 0 && (
+        <p className={styles.empty}>Sin conversaciones aún.</p>
+      )}
+
+      {groups.map(({ label, items }) => (
+        <div key={label} className={styles.group}>
+          <p className={styles.groupLabel}>{label}</p>
+          {items.map((conv) => (
+            <ConvItem
+              key={conv.id}
+              conv={conv}
+              isActive={conv.id === activeId}
+              onSelect={() => onSelect(conv.id)}
+              onRename={(newTitle) => onRename(conv.id, newTitle)}
+              onDeleteRequest={() => onDeleteRequest(conv.id)}
+            />
+          ))}
+        </div>
+      ))}
+    </>
+  );
+}
+
 // ── Sidebar ───────────────────────────────────────────────────────
 
 export function Sidebar({
@@ -252,42 +340,15 @@ export function Sidebar({
 
       {isOpen && (
         <div className={styles.list}>
-          {isLoading && conversations.length === 0 && (
-            <div className={styles.skeletonList}>
-              {[68, 80, 55, 72, 60].map((w, i) => (
-                <div key={i} className={styles.skeletonItem}>
-                  <div className={styles.skeletonLine} style={{ width: `${w}%` }} />
-                  <div className={styles.skeletonLine} style={{ width: "30%" }} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {!isLoading && conversations.length === 0 && (
-            <p className={styles.empty}>
-              Aún no hay conversaciones.
-              <span className={styles.emptyHint}>
-                Pulsa «Nueva conversación» para consultar Mercado Público,
-                Contraloría o el Congreso.
-              </span>
-            </p>
-          )}
-
-          {groups.map(({ label, items }) => (
-            <div key={label} className={styles.group}>
-              <p className={styles.groupLabel}>{label}</p>
-              {items.map((conv) => (
-                <ConvItem
-                  key={conv.id}
-                  conv={conv}
-                  isActive={conv.id === activeId}
-                  onSelect={() => onSelect(conv.id)}
-                  onRename={(newTitle) => onRename(conv.id, newTitle)}
-                  onDeleteRequest={() => onDeleteRequest(conv.id)}
-                />
-              ))}
-            </div>
-          ))}
+          <AuthGate
+            conversations={conversations}
+            groups={groups}
+            activeId={activeId}
+            isLoading={isLoading}
+            onSelect={onSelect}
+            onRename={onRename}
+            onDeleteRequest={onDeleteRequest}
+          />
         </div>
       )}
 

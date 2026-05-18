@@ -67,11 +67,13 @@ class ChatService:
         *,
         conversation_id: str | None,
         message: str,
+        user_id: str | None = None,
     ) -> ChatMessageResponse:
         """Persist a user message, run the audit pipeline, and persist traces."""
         conversation = await self._get_or_create_conversation(
             conversation_id=conversation_id,
             first_message=message,
+            user_id=user_id,
         )
 
         user_message = MessageRecord(
@@ -223,11 +225,12 @@ class ChatService:
             total_records=total_records,
         )
 
-    async def list_conversations(self) -> list[ConversationListItem]:
-        """Return conversations ordered by recent activity."""
+    async def list_conversations(self, user_id: str) -> list[ConversationListItem]:
+        """Return conversations for *user_id* ordered by recent activity."""
         rows = (
             await self._session.scalars(
                 select(ConversationRecord)
+                .where(ConversationRecord.user_id == user_id)
                 .where(ConversationRecord.deleted_at.is_(None))
                 .order_by(ConversationRecord.updated_at.desc())
             )
@@ -258,9 +261,11 @@ class ChatService:
             )
         return items
 
-    async def get_conversation(self, conversation_id: str) -> ConversationDetailResponse:
+    async def get_conversation(
+        self, conversation_id: str, user_id: str | None = None
+    ) -> ConversationDetailResponse:
         """Return a persisted conversation with messages and traces."""
-        conversation = await self._get_active_conversation(conversation_id)
+        conversation = await self._get_active_conversation(conversation_id, user_id=user_id)
 
         messages = (
             await self._session.scalars(
@@ -314,9 +319,10 @@ class ChatService:
         self,
         conversation_id: str,
         title: str,
+        user_id: str | None = None,
     ) -> ConversationOut:
         """Rename an active conversation."""
-        conversation = await self._get_active_conversation(conversation_id)
+        conversation = await self._get_active_conversation(conversation_id, user_id=user_id)
         conversation.title = title
         conversation.updated_at = utc_now()
         await self._session.commit()
@@ -330,9 +336,10 @@ class ChatService:
         feedback_text: str | None,
         update_rating: bool,
         update_text: bool,
+        user_id: str | None = None,
     ) -> ConversationOut:
         """Set, update, or clear user feedback for an active conversation."""
-        conversation = await self._get_active_conversation(conversation_id)
+        conversation = await self._get_active_conversation(conversation_id, user_id=user_id)
         if update_rating:
             conversation.feedback_rating = feedback_rating
         if update_text:
@@ -354,9 +361,11 @@ class ChatService:
         await self._session.commit()
         return _message_out(message)
 
-    async def delete_conversation(self, conversation_id: str) -> None:
+    async def delete_conversation(
+        self, conversation_id: str, user_id: str | None = None
+    ) -> None:
         """Soft-delete an active conversation while preserving its audit trail."""
-        conversation = await self._get_active_conversation(conversation_id)
+        conversation = await self._get_active_conversation(conversation_id, user_id=user_id)
         conversation.deleted_at = utc_now()
         await self._session.commit()
 
@@ -365,6 +374,7 @@ class ChatService:
         *,
         conversation_id: str | None,
         first_message: str,
+        user_id: str | None = None,
     ) -> ConversationRecord:
         if conversation_id:
             return await self._get_active_conversation(conversation_id)
@@ -374,18 +384,27 @@ class ChatService:
             title=_fallback_title(first_message),
             created_at=utc_now(),
             updated_at=utc_now(),
+            user_id=user_id,
         )
         self._session.add(conversation)
         await self._session.commit()
         return conversation
 
-    async def _get_active_conversation(self, conversation_id: str) -> ConversationRecord:
+    async def _get_active_conversation(
+        self,
+        conversation_id: str,
+        user_id: str | None = None,
+    ) -> ConversationRecord:
         conversation = await self._session.scalar(
             select(ConversationRecord)
             .where(ConversationRecord.id == conversation_id)
             .where(ConversationRecord.deleted_at.is_(None))
         )
         if not conversation:
+            raise ChatNotFoundError(f"Conversation {conversation_id!r} not found.")
+        # If the conversation belongs to a user, enforce ownership.
+        # Use the same error message to avoid leaking whether the ID exists.
+        if conversation.user_id and conversation.user_id != user_id:
             raise ChatNotFoundError(f"Conversation {conversation_id!r} not found.")
         return conversation
 

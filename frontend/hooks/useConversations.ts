@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { listConversations } from "@/lib/api";
 import type { ConversationListItem } from "@/lib/types";
 
@@ -11,42 +12,45 @@ interface State {
 }
 
 export function useConversations() {
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+
   const [state, setState] = useState<State>({
     conversations: [],
-    isLoading: true,
+    isLoading: false,
     error: null,
   });
 
-  // Incrementing this triggers a re-fetch without requiring the caller
-  // to manage its own effect dependency.
   const [fetchTick, setFetchTick] = useState(0);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!isLoaded) return;
 
+    if (!isSignedIn) {
+      setState({ conversations: [], isLoading: false, error: null });
+      return;
+    }
+
+    let cancelled = false;
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
-    listConversations()
-      .then((conversations) => {
-        if (!cancelled) {
-          setState({ conversations, isLoading: false, error: null });
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          const error =
-            err instanceof Error ? err.message : "Error al cargar conversaciones.";
-          setState((prev) => ({ ...prev, isLoading: false, error }));
-        }
-      });
+    // Get token then fetch — Clerk's recommended cross-origin pattern.
+    getToken().then((token) => {
+      if (cancelled) return;
+      return listConversations(token);
+    }).then((conversations) => {
+      if (!cancelled && conversations) {
+        setState({ conversations, isLoading: false, error: null });
+      }
+    }).catch((err) => {
+      if (!cancelled) {
+        const error = err instanceof Error ? err.message : "Error al cargar conversaciones.";
+        setState((prev) => ({ ...prev, isLoading: false, error }));
+      }
+    });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchTick]);
+    return () => { cancelled = true; };
+  }, [fetchTick, isLoaded, isSignedIn, getToken]);
 
-  // Call this after a new conversation is created or a message is sent,
-  // so the sidebar stays in sync with the backend.
   const refresh = useCallback(() => setFetchTick((n) => n + 1), []);
 
   return { ...state, refresh };

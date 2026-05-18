@@ -21,16 +21,17 @@ function baseUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
+// token is passed explicitly from the calling hook — Clerk's recommended pattern.
 async function request<T>(
   path: string,
+  token: string | null,
   init: RequestInit = {},
 ): Promise<T> {
   const res = await fetch(`${baseUrl()}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      // Auth header goes here in Phase 3:
-      // "Authorization": `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
   });
@@ -41,24 +42,23 @@ async function request<T>(
       const body = await res.json();
       if (body?.detail) detail = body.detail;
     } catch {
-      // ignore parse errors, keep the status code message
+      // ignore parse errors
     }
     throw new ApiError(detail, res.status);
   }
 
-  // 204 No Content — return undefined cast to T (caller must type as void).
   if (res.status === 204) return undefined as T;
-
   return res.json() as Promise<T>;
 }
 
-// ── Chat endpoints ───────────────────────────────────────────────────────
+// ── Chat endpoints ────────────────────────────────────────────────────────
 
 export function sendChatMessage(
   message: string,
   conversationId: string | null,
+  token: string | null,
 ): Promise<ChatMessageResponse> {
-  return request<ChatMessageResponse>("/api/v1/chat/messages", {
+  return request<ChatMessageResponse>("/api/v1/chat/messages", token, {
     method: "POST",
     body: JSON.stringify({
       message,
@@ -67,43 +67,51 @@ export function sendChatMessage(
   });
 }
 
-export function listConversations(): Promise<ConversationListItem[]> {
-  return request<ConversationListItem[]>("/api/v1/chat/conversations");
+export function listConversations(token: string | null): Promise<ConversationListItem[]> {
+  return request<ConversationListItem[]>("/api/v1/chat/conversations", token);
 }
 
 export function getConversation(
   conversationId: string,
+  token: string | null,
 ): Promise<ConversationDetailResponse> {
   return request<ConversationDetailResponse>(
     `/api/v1/chat/conversations/${conversationId}`,
+    token,
   );
 }
 
 export function renameConversation(
   conversationId: string,
   title: string,
+  token: string | null,
 ): Promise<ConversationOut> {
   return request<ConversationOut>(
     `/api/v1/chat/conversations/${conversationId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ title }),
-    },
+    token,
+    { method: "PATCH", body: JSON.stringify({ title }) },
   );
 }
 
-export function deleteConversation(conversationId: string): Promise<void> {
-  return request<void>(`/api/v1/chat/conversations/${conversationId}`, {
-    method: "DELETE",
-  });
+export function deleteConversation(
+  conversationId: string,
+  token: string | null,
+): Promise<void> {
+  return request<void>(
+    `/api/v1/chat/conversations/${conversationId}`,
+    token,
+    { method: "DELETE" },
+  );
 }
 
 export function submitMessageFeedback(
   messageId: string,
   feedbackRating: FeedbackRating | null,
+  token: string | null,
 ): Promise<MessageOut> {
-  return request<MessageOut>(`/api/v1/chat/messages/${messageId}/feedback`, {
-    method: "PATCH",
-    body: JSON.stringify({ feedback_rating: feedbackRating }),
-  });
+  return request<MessageOut>(
+    `/api/v1/chat/messages/${messageId}/feedback`,
+    token,
+    { method: "PATCH", body: JSON.stringify({ feedback_rating: feedbackRating }) },
+  );
 }
